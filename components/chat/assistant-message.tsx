@@ -4,11 +4,12 @@ import { RefreshCw, ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { regenerate, setFeedback } from "@/lib/actions";
-import { modelName } from "@/lib/models";
+import { effortName, modelName } from "@/lib/models";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 import { Markdown } from "./markdown";
+import { Thinking } from "./thinking";
 
 interface AssistantMessageProps {
   conversationId: string;
@@ -23,13 +24,22 @@ export const AssistantMessage = memo(function AssistantMessage({
   isLatest,
 }: AssistantMessageProps) {
   const streaming = message.status === "streaming";
+  const waiting = streaming && !message.content;
+  // While a model set to reason works on its answer, and afterwards if it shared its reasoning.
+  const showThinking =
+    Boolean(message.reasoning) || (waiting && message.effort !== undefined && message.effort !== "none");
 
   return (
     <div className="group flex flex-col gap-2">
-      {streaming && !message.content ? (
-        <span role="status" aria-label="Generating a reply" className="flex h-7 items-center">
-          <span className="size-3.5 animate-pulse-dot rounded-full bg-fg" />
-        </span>
+      {showThinking && (
+        <Thinking reasoning={message.reasoning} active={waiting} durationMs={message.thinkingMs} />
+      )}
+      {waiting ? (
+        !showThinking && (
+          <span role="status" aria-label="Generating a reply" className="flex h-7 items-center">
+            <span className="size-3.5 animate-pulse-dot rounded-full bg-fg" />
+          </span>
+        )
       ) : message.content ? (
         <Markdown content={message.content} />
       ) : (
@@ -69,7 +79,10 @@ export const AssistantMessage = memo(function AssistantMessage({
             <RefreshCw />
           </IconButton>
           {message.model && (
-            <span className="ml-2 truncate text-xs text-fg-subtle">{modelName(message.model)}</span>
+            <span className="ml-2 truncate text-xs text-fg-subtle">
+              {modelName(message.model)}
+              {message.effort && ` · ${effortName(message.effort)}`}
+            </span>
           )}
         </div>
       )}

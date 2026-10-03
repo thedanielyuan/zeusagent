@@ -97,8 +97,9 @@
 }
 
 @layer components {
-  /* Composer: one row (+ | text | send) that becomes text on top, buttons below, once the
-     text wraps. Toggled with data-expanded by the component. */
+  /* Composer: one row (+ | text | pickers, send) that becomes text on top, buttons below, once
+     the text wraps (data-expanded, set by the component) or when the composer is too narrow
+     to fit the pickers beside the text. */
   .composer {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -109,8 +110,31 @@
   .composer[data-expanded="true"] {
     grid-template-areas:
       "primary primary primary"
-      "leading . trailing";
+      "leading trailing trailing";
     row-gap: 0.5rem;
+  }
+  @container composer (width < 36rem) {
+    .composer {
+      grid-template-areas:
+        "primary primary primary"
+        "leading trailing trailing";
+      row-gap: 0.5rem;
+    }
+  }
+
+  /* "Thinking…": a highlight sweeping across the text */
+  .shimmer-text {
+    background: linear-gradient(
+        90deg,
+        var(--color-fg-subtle) 40%,
+        var(--color-fg) 50%,
+        var(--color-fg-subtle) 60%
+      )
+      0 0 / 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
   }
 
   /* Assistant replies */
@@ -297,6 +321,15 @@
   }
   .hljs-strong {
     font-weight: 600;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
   }
 }
 

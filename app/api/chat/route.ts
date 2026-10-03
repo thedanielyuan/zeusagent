@@ -1,5 +1,5 @@
-import { getModel } from "@/lib/models";
-import type { ChatMessage, ChatStreamEvent } from "@/lib/types";
+import { getModel, isEffort } from "@/lib/models";
+import type { ChatMessage, ChatStreamEvent, ReasoningEffort } from "@/lib/types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -17,14 +17,23 @@ export async function POST(request: Request) {
   if (!body) return errorResponse(400, "Expected a JSON body with a model and messages.");
   // Only the models offered in the picker, so this endpoint can't run arbitrary (possibly
   // expensive) models on the key.
-  if (!getModel(body.model)) return errorResponse(400, `Unknown model: ${body.model}`);
+  const model = getModel(body.model);
+  if (!model) return errorResponse(400, `Unknown model: ${body.model}`);
+  if (body.effort && !model.reasoning?.efforts.includes(body.effort)) {
+    return errorResponse(400, `${model.name} doesn't support ${body.effort} reasoning effort.`);
+  }
 
   let upstream: Response;
   try {
     upstream = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: body.model, messages: body.messages, stream: true }),
+      body: JSON.stringify({
+        model: body.model,
+        messages: body.messages,
+        ...(body.effort && { reasoning: { effort: body.effort } }),
+        stream: true,
+      }),
       // Stops the generation (and its billing) when the browser disconnects, e.g. on "stop".
       signal: request.signal,
     });
@@ -50,10 +59,17 @@ export async function POST(request: Request) {
   });
 }
 
-function parseBody(value: unknown): { model: string; messages: ChatMessage[] } | null {
+interface ChatBody {
+  model: string;
+  effort?: ReasoningEffort;
+  messages: ChatMessage[];
+}
+
+function parseBody(value: unknown): ChatBody | null {
   if (typeof value !== "object" || value === null) return null;
-  const { model, messages } = value as { model?: unknown; messages?: unknown };
+  const { model, effort, messages } = value as { model?: unknown; effort?: unknown; messages?: unknown };
   if (typeof model !== "string" || !Array.isArray(messages) || messages.length === 0) return null;
+  if (effort !== undefined && !isEffort(effort)) return null;
 
   const valid = messages.every(
     (message: Partial<ChatMessage> | null) =>
@@ -63,6 +79,7 @@ function parseBody(value: unknown): { model: string; messages: ChatMessage[] } |
   if (!valid) return null;
   return {
     model,
+    effort,
     messages: (messages as ChatMessage[]).map(({ role, content }) => ({ role, content })),
   };
 }
@@ -97,7 +114,7 @@ function serverSentEventData(): TransformStream<string, string> {
 }
 
 interface CompletionChunk {
-  choices?: { delta?: { content?: string | null } }[];
+  choices?: { delta?: { content?: string | null; reasoning?: string | null } }[];
   /** Set when the generation fails after streaming has started (the HTTP status is still 200). */
   error?: { message?: string };
 }
@@ -119,8 +136,9 @@ function toChatEvents(): TransformStream<string, string> {
         send({ type: "error", message: chunk.error.message || "The model stopped with an error." });
         return;
       }
-      const text = chunk.choices?.[0]?.delta?.content;
-      if (text) send({ type: "text", text });
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.reasoning) send({ type: "reasoning", text: delta.reasoning });
+      if (delta?.content) send({ type: "text", text: delta.content });
     },
   });
 }
