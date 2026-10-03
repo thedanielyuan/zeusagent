@@ -2,32 +2,40 @@
 
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import type { Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
+import { SiteIcons } from "./sources";
 
 interface ThinkingProps {
   /** The reasoning the model shared so far, if any. */
   reasoning?: string;
   /** True until the answer starts. */
   active: boolean;
+  /** Pages the model's web searches have found so far. */
+  sources: Source[];
   /** How long it thought, once done. */
   durationMs?: number;
 }
 
 /**
- * "Thinking…" while the model reasons, then "Thought for 12s". When the model shares its
- * reasoning, the label opens it (live while it's still thinking).
+ * "Thinking…" while the model works on its answer ("Searching the web…" once a search has come
+ * back), then "Thought for 12s". When the model shares its reasoning, the label opens it (live
+ * while it's still thinking).
  */
-export function Thinking({ reasoning, active, durationMs }: ThinkingProps) {
+export function Thinking({ reasoning, active, sources, durationMs }: ThinkingProps) {
   const [open, setOpen] = useState(false);
+  const searching = active && sources.length > 0;
+
+  let text = "Reasoning";
+  if (searching) text = "Searching the web…";
+  else if (active) text = "Thinking…";
+  else if (durationMs !== undefined) text = `Thought for ${formatDuration(durationMs)}`;
 
   const label = (
-    <span className={cn(active && "shimmer-text")}>
-      {active
-        ? "Thinking…"
-        : durationMs === undefined
-          ? "Reasoning"
-          : `Thought for ${formatDuration(durationMs)}`}
+    <span className="flex items-center gap-2">
+      <span className={cn(active && "shimmer-text")}>{text}</span>
+      {searching && <SiteIcons sources={sources} />}
     </span>
   );
 

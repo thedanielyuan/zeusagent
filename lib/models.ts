@@ -3,7 +3,8 @@ import type { ChatModel, ModelReasoning, ReasoningEffort } from "./types";
 /**
  * Models offered in the picker. The ids are OpenRouter model slugs and `reasoning` mirrors each
  * model's `reasoning` entry, so this list can later be replaced by (or filtered from)
- * https://openrouter.ai/api/v1/models without other changes.
+ * https://openrouter.ai/api/v1/models without other changes. Every model needs to support tool
+ * calling (`tools` in its `supported_parameters`): replies get a clock and web search as tools.
  */
 export const MODELS: ChatModel[] = [
   {

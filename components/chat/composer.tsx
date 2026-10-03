@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { fitTextareaHeight, isSubmitKey } from "@/lib/utils";
 import { EffortSelector, ModelSelector } from "./model-selector";
+import { SearchToggle } from "./search-toggle";
 
 const INPUT_ID = "composer-input";
 
@@ -96,7 +97,7 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
         }}
         className="composer cursor-text rounded-[28px] border border-white/[0.08] bg-surface p-2.5 shadow-lg shadow-black/40 transition-colors focus-within:border-white/[0.14]"
       >
-        <div className="flex [grid-area:leading]">
+        <div className="flex gap-1 [grid-area:leading]">
           <IconButton
             label="Add files"
             tooltip="Attachments are coming soon"
@@ -105,6 +106,7 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
           >
             <Plus />
           </IconButton>
+          <SearchToggle />
         </div>
 
         <textarea

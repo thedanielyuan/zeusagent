@@ -1,6 +1,6 @@
 import type { ChatMessage, ChatStreamEvent, ReasoningEffort } from "./types";
 
-/** A piece of the reply: its text, or the model's reasoning before it. */
+/** A piece of the reply: its text, the model's reasoning, or pages it found on the web. */
 export type ReplyChunk = Exclude<ChatStreamEvent, { type: "error" }>;
 
 export interface ChatRequest {
@@ -8,6 +8,8 @@ export interface ChatRequest {
   model: string;
   /** Omitted for models that can't reason. */
   effort?: ReasoningEffort;
+  /** Lets the model search the web when it needs to. */
+  webSearch: boolean;
   messages: ChatMessage[];
   signal: AbortSignal;
 }
@@ -17,11 +19,18 @@ export interface ChatRequest {
  * Throws with a readable message when the request fails; aborting `signal` stops the reply.
  */
 export async function* streamChat(request: ChatRequest): AsyncGenerator<ReplyChunk> {
-  const { model, effort, messages, signal } = request;
+  const { model, effort, webSearch, messages, signal } = request;
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, effort, messages }),
+    body: JSON.stringify({
+      model,
+      effort,
+      webSearch,
+      messages,
+      // So the model knows the user's date and can tell them the time.
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
     signal,
   });
   if (!response.ok || !response.body) throw new Error(await errorMessage(response));

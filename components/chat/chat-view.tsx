@@ -62,7 +62,9 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
   }, [conversationId]);
 
   // The composer keeps the same position in the tree on both screens, so it stays mounted
-  // (and focused) when the first message turns the new chat into a conversation.
+  // (and focused) when the first message turns the new chat into a conversation. On wider
+  // new-chat screens the space above and below it splits 41:59, which puts its top about 42% of
+  // the way down, where ChatGPT puts it.
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col">
       <header className="flex h-13 shrink-0 items-center justify-between px-2">
@@ -75,7 +77,7 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
       </header>
 
       {isNewChat ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 md:justify-end md:pb-8">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 md:flex-41 md:justify-end md:pb-8">
           <h1 className="text-center text-[28px] leading-tight font-medium tracking-tight text-fg">
             What can I help with?
           </h1>
@@ -100,7 +102,7 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
       </div>
 
       {isNewChat && (
-        <div className="hidden flex-1 justify-center px-4 pt-4 md:flex">
+        <div className="hidden flex-59 justify-center px-4 pt-4 md:flex">
           <Suggestions onPick={send} className="h-fit" />
         </div>
       )}

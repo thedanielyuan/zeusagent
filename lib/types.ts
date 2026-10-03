@@ -15,10 +15,18 @@ export interface Message {
   reasoning?: string;
   /** Assistant only: how long the model thought before answering, in ms. */
   thinkingMs?: number;
+  /** Assistant only: pages the model found by searching the web, in the order it found them. */
+  sources?: Source[];
   /** Assistant only. */
   status?: MessageStatus;
   error?: string;
   feedback?: "up" | "down";
+}
+
+/** A web page found by a search. */
+export interface Source {
+  url: string;
+  title: string;
 }
 
 /** A message as sent to the model. */
@@ -32,6 +40,8 @@ export type ChatStreamEvent =
   | { type: "text"; text: string }
   /** Part of the model's reasoning, which comes before the answer. */
   | { type: "reasoning"; text: string }
+  /** Pages a web search found, each sent once, before the text that uses them. */
+  | { type: "sources"; sources: Source[] }
   | { type: "error"; message: string };
 
 export interface Conversation {

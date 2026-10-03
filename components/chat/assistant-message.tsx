@@ -5,11 +5,14 @@ import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { regenerate, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
-import type { Message } from "@/lib/types";
+import type { Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 import { Markdown } from "./markdown";
+import { SourcesMenu } from "./sources";
 import { Thinking } from "./thinking";
+
+const NO_SOURCES: Source[] = [];
 
 interface AssistantMessageProps {
   conversationId: string;
@@ -25,14 +28,22 @@ export const AssistantMessage = memo(function AssistantMessage({
 }: AssistantMessageProps) {
   const streaming = message.status === "streaming";
   const waiting = streaming && !message.content;
-  // While a model set to reason works on its answer, and afterwards if it shared its reasoning.
+  const sources = message.sources ?? NO_SOURCES;
+  // While the model reasons or searches on the way to its answer, and afterwards if it shared its
+  // reasoning.
   const showThinking =
-    Boolean(message.reasoning) || (waiting && message.effort !== undefined && message.effort !== "none");
+    Boolean(message.reasoning) ||
+    (waiting && (sources.length > 0 || (message.effort !== undefined && message.effort !== "none")));
 
   return (
     <div className="group flex flex-col gap-2">
       {showThinking && (
-        <Thinking reasoning={message.reasoning} active={waiting} durationMs={message.thinkingMs} />
+        <Thinking
+          reasoning={message.reasoning}
+          active={waiting}
+          sources={sources}
+          durationMs={message.thinkingMs}
+        />
       )}
       {waiting ? (
         !showThinking && (
@@ -61,7 +72,8 @@ export const AssistantMessage = memo(function AssistantMessage({
           className={cn(
             "-ml-2 flex items-center transition-opacity",
             !isLatest &&
-              "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+              // Also stays visible while the sources menu is open, since the menu is outside the reply.
+              "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
           {message.content && (
@@ -78,6 +90,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           >
             <RefreshCw />
           </IconButton>
+          {sources.length > 0 && <SourcesMenu sources={sources} />}
           {message.model && (
             <span className="ml-2 truncate text-xs text-fg-subtle">
               {modelName(message.model)}
