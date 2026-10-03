@@ -1,0 +1,185 @@
+import { streamChat } from "./chat-api";
+import { useChatStore } from "./store";
+import type { Message } from "./types";
+import { createId } from "./utils";
+
+const { getState, setState } = useChatStore;
+
+/** Replies currently streaming, by conversation id. */
+const controllers = new Map<string, AbortController>();
+
+export function setModel(modelId: string) {
+  setState({ modelId });
+}
+
+/** Sends a message, starting a new conversation when `conversationId` is null. Returns its id. */
+export function sendMessage(conversationId: string | null, content: string): string {
+  const text = content.trim();
+  const now = Date.now();
+  const message: Message = { id: createId(), role: "user", content: text, createdAt: now };
+
+  if (conversationId && getState().conversations[conversationId]) {
+    if (controllers.has(conversationId)) return conversationId;
+    updateMessages(conversationId, (messages) => [...messages, message]);
+    touch(conversationId);
+    void generate(conversationId);
+    return conversationId;
+  }
+
+  const id = createId();
+  setState((state) => ({
+    conversations: {
+      ...state.conversations,
+      [id]: { id, title: titleFrom(text), createdAt: now, updatedAt: now },
+    },
+    messages: { ...state.messages, [id]: [message] },
+  }));
+  void generate(id);
+  return id;
+}
+
+/** Replaces an assistant reply (and anything after it) with a freshly generated one. */
+export function regenerate(conversationId: string, messageId: string) {
+  const index = indexOfMessage(conversationId, messageId);
+  if (index === -1) return;
+  controllers.get(conversationId)?.abort();
+  updateMessages(conversationId, (messages) => messages.slice(0, index));
+  void generate(conversationId);
+}
+
+/** Rewrites a user message, drops everything after it and generates a new reply. */
+export function editMessage(conversationId: string, messageId: string, content: string) {
+  const text = content.trim();
+  const index = indexOfMessage(conversationId, messageId);
+  if (!text || index === -1) return;
+  controllers.get(conversationId)?.abort();
+  updateMessages(conversationId, (messages) => [
+    ...messages.slice(0, index),
+    { ...messages[index], content: text },
+  ]);
+  touch(conversationId);
+  void generate(conversationId);
+}
+
+export function stopGenerating(conversationId: string) {
+  controllers.get(conversationId)?.abort();
+}
+
+export function setFeedback(conversationId: string, messageId: string, feedback: "up" | "down") {
+  patchMessage(conversationId, messageId, (message) => ({
+    feedback: message.feedback === feedback ? undefined : feedback,
+  }));
+}
+
+export function renameConversation(conversationId: string, title: string) {
+  const trimmed = title.trim();
+  setState((state) => {
+    const conversation = state.conversations[conversationId];
+    if (!conversation || !trimmed || trimmed === conversation.title) return state;
+    return {
+      conversations: { ...state.conversations, [conversationId]: { ...conversation, title: trimmed } },
+    };
+  });
+}
+
+export function deleteConversation(conversationId: string) {
+  controllers.get(conversationId)?.abort();
+  setState((state) => ({
+    conversations: omit(state.conversations, conversationId),
+    messages: omit(state.messages, conversationId),
+  }));
+}
+
+export function deleteAllConversations() {
+  for (const controller of controllers.values()) controller.abort();
+  setState({ conversations: {}, messages: {} });
+}
+
+async function generate(conversationId: string) {
+  const { modelId, messages } = getState();
+  const history = (messages[conversationId] ?? [])
+    .filter((message) => message.content.trim())
+    .map(({ role, content }) => ({ role, content }));
+
+  const reply: Message = {
+    id: createId(),
+    role: "assistant",
+    content: "",
+    createdAt: Date.now(),
+    model: modelId,
+    status: "streaming",
+  };
+  updateMessages(conversationId, (list) => [...list, reply]);
+
+  const controller = new AbortController();
+  controllers.set(conversationId, controller);
+  try {
+    for await (const chunk of streamChat({ model: modelId, messages: history, signal: controller.signal })) {
+      patchMessage(conversationId, reply.id, (message) => ({ content: message.content + chunk }));
+    }
+    patchMessage(conversationId, reply.id, () => ({ status: "done" }));
+  } catch (error) {
+    if (controller.signal.aborted) {
+      // Keep whatever streamed before the stop.
+      patchMessage(conversationId, reply.id, () => ({ status: "stopped" }));
+    } else {
+      const reason = error instanceof Error ? error.message : "Something went wrong.";
+      patchMessage(conversationId, reply.id, () => ({ status: "error", error: reason }));
+    }
+  } finally {
+    if (controllers.get(conversationId) === controller) controllers.delete(conversationId);
+    touch(conversationId);
+  }
+}
+
+function updateMessages(conversationId: string, update: (messages: Message[]) => Message[]) {
+  setState((state) => {
+    const messages = state.messages[conversationId];
+    // The conversation may have been deleted while a reply was streaming.
+    if (!messages) return state;
+    return { messages: { ...state.messages, [conversationId]: update(messages) } };
+  });
+}
+
+function patchMessage(
+  conversationId: string,
+  messageId: string,
+  patch: (message: Message) => Partial<Message>,
+) {
+  updateMessages(conversationId, (messages) =>
+    messages.map((message) => (message.id === messageId ? { ...message, ...patch(message) } : message)),
+  );
+}
+
+/** Marks a conversation as recently active, which moves it to the top of the sidebar. */
+function touch(conversationId: string) {
+  setState((state) => {
+    const conversation = state.conversations[conversationId];
+    if (!conversation) return state;
+    return {
+      conversations: {
+        ...state.conversations,
+        [conversationId]: { ...conversation, updatedAt: Date.now() },
+      },
+    };
+  });
+}
+
+function indexOfMessage(conversationId: string, messageId: string): number {
+  return getState().messages[conversationId]?.findIndex((message) => message.id === messageId) ?? -1;
+}
+
+/** Title from the first message until titles are generated by a model. */
+function titleFrom(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= 40) return line;
+  const cut = line.slice(0, 40);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
+function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const copy = { ...record };
+  delete copy[key];
+  return copy;
+}
