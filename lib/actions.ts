@@ -1,6 +1,7 @@
 import { streamChat } from "./chat-api";
+import { getModel, resolveEffort } from "./models";
 import { useChatStore } from "./store";
-import type { Message } from "./types";
+import type { Message, ReasoningEffort } from "./types";
 import { createId } from "./utils";
 
 const { getState, setState } = useChatStore;
@@ -10,6 +11,10 @@ const controllers = new Map<string, AbortController>();
 
 export function setModel(modelId: string) {
   setState({ modelId });
+}
+
+export function setEffort(effort: ReasoningEffort) {
+  setState({ effort });
 }
 
 /** Sends a message, starting a new conversation when `conversationId` is null. Returns its id. */
@@ -96,7 +101,9 @@ export function deleteAllConversations() {
 }
 
 async function generate(conversationId: string) {
-  const { modelId, messages } = getState();
+  const { modelId, effort: preferredEffort, messages } = getState();
+  const reasoning = getModel(modelId)?.reasoning;
+  const effort = reasoning && resolveEffort(reasoning, preferredEffort);
   const history = (messages[conversationId] ?? [])
     .filter((message) => message.content.trim())
     .map(({ role, content }) => ({ role, content }));
@@ -107,6 +114,7 @@ async function generate(conversationId: string) {
     content: "",
     createdAt: Date.now(),
     model: modelId,
+    effort,
     status: "streaming",
   };
   updateMessages(conversationId, (list) => [...list, reply]);
@@ -114,8 +122,17 @@ async function generate(conversationId: string) {
   const controller = new AbortController();
   controllers.set(conversationId, controller);
   try {
-    for await (const chunk of streamChat({ model: modelId, messages: history, signal: controller.signal })) {
-      patchMessage(conversationId, reply.id, (message) => ({ content: message.content + chunk }));
+    const stream = streamChat({ model: modelId, effort, messages: history, signal: controller.signal });
+    for await (const chunk of stream) {
+      patchMessage(conversationId, reply.id, (message) =>
+        chunk.type === "reasoning"
+          ? { reasoning: (message.reasoning ?? "") + chunk.text }
+          : {
+              content: message.content + chunk.text,
+              // The answer starting ends the thinking.
+              thinkingMs: message.thinkingMs ?? Date.now() - message.createdAt,
+            },
+      );
     }
     patchMessage(conversationId, reply.id, () => ({ status: "done" }));
   } catch (error) {
@@ -127,6 +144,12 @@ async function generate(conversationId: string) {
       patchMessage(conversationId, reply.id, () => ({ status: "error", error: reason }));
     }
   } finally {
+    // Stopped (or failed) while still thinking: it thought until now.
+    patchMessage(conversationId, reply.id, (message) =>
+      message.reasoning && message.thinkingMs === undefined
+        ? { thinkingMs: Date.now() - message.createdAt }
+        : {},
+    );
     if (controllers.get(conversationId) === controller) controllers.delete(conversationId);
     touch(conversationId);
   }

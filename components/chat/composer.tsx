@@ -4,6 +4,7 @@ import { ArrowUp, Plus, Square } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { fitTextareaHeight, isSubmitKey } from "@/lib/utils";
+import { EffortSelector, ModelSelector } from "./model-selector";
 
 const INPUT_ID = "composer-input";
 
@@ -58,18 +59,18 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
     }
   }, [value]);
 
-  // Re-measure when the available width changes (window resize, sidebar toggle).
+  // Re-measure when the text's width changes (window resize, sidebar toggle, picking a model
+  // with a longer name).
   useEffect(() => {
-    const form = formRef.current;
     const textarea = textareaRef.current;
-    if (!form || !textarea) return;
-    let width = form.clientWidth;
+    if (!textarea) return;
+    let width = textarea.clientWidth;
     const observer = new ResizeObserver(() => {
-      if (form.clientWidth === width) return;
-      width = form.clientWidth;
+      if (textarea.clientWidth === width) return;
+      width = textarea.clientWidth;
       fitTextareaHeight(textarea);
     });
-    observer.observe(form);
+    observer.observe(textarea);
     return () => observer.disconnect();
   }, []);
 
@@ -82,65 +83,70 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
   };
 
   return (
-    <form
-      ref={formRef}
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) textareaRef.current?.focus();
-      }}
-      className="composer cursor-text rounded-[28px] border border-white/[0.08] bg-surface p-2.5 shadow-lg shadow-black/40 transition-colors focus-within:border-white/[0.14]"
-    >
-      <div className="flex [grid-area:leading]">
-        <IconButton
-          label="Add files"
-          tooltip="Attachments are coming soon"
-          aria-disabled
-          className="rounded-full aria-disabled:cursor-not-allowed"
-        >
-          <Plus />
-        </IconButton>
-      </div>
-
-      <textarea
-        id={INPUT_ID}
-        ref={textareaRef}
-        rows={1}
-        value={value}
-        onChange={(event) => updateValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (!isSubmitKey(event)) return;
+    // A container, so the composer can switch to two rows when it's narrow (see globals.css).
+    <div className="@container/composer">
+      <form
+        ref={formRef}
+        onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
-        placeholder="Ask anything"
-        aria-label="Message Zeus"
-        className="block max-h-[max(35dvh,6rem)] w-full resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-base leading-6 text-fg caret-accent outline-none [grid-area:primary] placeholder:text-fg-subtle"
-      />
+        onClick={(event) => {
+          if (event.target === event.currentTarget) textareaRef.current?.focus();
+        }}
+        className="composer cursor-text rounded-[28px] border border-white/[0.08] bg-surface p-2.5 shadow-lg shadow-black/40 transition-colors focus-within:border-white/[0.14]"
+      >
+        <div className="flex [grid-area:leading]">
+          <IconButton
+            label="Add files"
+            tooltip="Attachments are coming soon"
+            aria-disabled
+            className="rounded-full aria-disabled:cursor-not-allowed"
+          >
+            <Plus />
+          </IconButton>
+        </div>
 
-      <div className="flex justify-end [grid-area:trailing]">
-        {generating ? (
-          <button
-            type="button"
-            onClick={onStop}
-            aria-label="Stop generating"
-            className="flex size-9 items-center justify-center rounded-full bg-accent text-black transition-colors hover:bg-accent-hover"
-          >
-            <Square className="size-3.5 fill-current" />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!canSend}
-            aria-label="Send message"
-            className="flex size-9 items-center justify-center rounded-full bg-accent text-black transition-colors hover:bg-accent-hover disabled:bg-white/10 disabled:text-fg-subtle"
-          >
-            <ArrowUp className="size-5" strokeWidth={2.25} />
-          </button>
-        )}
-      </div>
-    </form>
+        <textarea
+          id={INPUT_ID}
+          ref={textareaRef}
+          rows={1}
+          value={value}
+          onChange={(event) => updateValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (!isSubmitKey(event)) return;
+            event.preventDefault();
+            submit();
+          }}
+          placeholder="Ask anything"
+          aria-label="Message Zeus"
+          className="block max-h-[max(35dvh,6rem)] w-full resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-base leading-6 text-fg caret-accent outline-none [grid-area:primary] placeholder:text-fg-subtle"
+        />
+
+        <div className="flex min-w-0 items-center justify-end gap-1 [grid-area:trailing]">
+          <EffortSelector />
+          <ModelSelector />
+          {generating ? (
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label="Stop generating"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-black transition-colors hover:bg-accent-hover"
+            >
+              <Square className="size-3.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!canSend}
+              aria-label="Send message"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-black transition-colors hover:bg-accent-hover disabled:bg-white/10 disabled:text-fg-subtle"
+            >
+              <ArrowUp className="size-5" strokeWidth={2.25} />
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
   );
 }

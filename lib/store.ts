@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
-import { DEFAULT_MODEL_ID, getModel } from "./models";
-import type { Conversation, Message } from "./types";
+import { DEFAULT_MODEL_ID, getModel, isEffort } from "./models";
+import type { Conversation, Message, ReasoningEffort } from "./types";
 
 export interface ChatState {
   conversations: Record<string, Conversation>;
@@ -12,11 +12,16 @@ export interface ChatState {
   messages: Record<string, Message[]>;
   /** Model used for new replies. */
   modelId: string;
+  /**
+   * Reasoning effort for new replies, or null for each model's default. Models without that
+   * level use their closest one (see resolveEffort).
+   */
+  effort: ReasoningEffort | null;
   /** True once the chats saved in this browser have been loaded. */
   hydrated: boolean;
 }
 
-type SavedState = Pick<ChatState, "conversations" | "messages" | "modelId">;
+type SavedState = Pick<ChatState, "conversations" | "messages" | "modelId" | "effort">;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -24,6 +29,7 @@ export const useChatStore = create<ChatState>()(
       conversations: {},
       messages: {},
       modelId: DEFAULT_MODEL_ID,
+      effort: null,
       hydrated: false,
     }),
     {
@@ -32,10 +38,11 @@ export const useChatStore = create<ChatState>()(
       storage: throttledLocalStorage(),
       // ChatApp rehydrates after mount, so the server and the first client render match.
       skipHydration: true,
-      partialize: ({ conversations, messages, modelId }): SavedState => ({
+      partialize: ({ conversations, messages, modelId, effort }): SavedState => ({
         conversations,
         messages,
         modelId,
+        effort,
       }),
       merge: (saved, current) => ({ ...current, ...restore(saved as Partial<SavedState>) }),
       onRehydrateStorage: () => () => useChatStore.setState({ hydrated: true }),
@@ -56,6 +63,7 @@ function restore(saved: Partial<SavedState> | undefined): Partial<ChatState> {
     conversations: saved.conversations ?? {},
     messages,
     ...(getModel(saved.modelId) && { modelId: saved.modelId }),
+    ...(isEffort(saved.effort) && { effort: saved.effort }),
   };
 }
 

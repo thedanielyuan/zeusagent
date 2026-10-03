@@ -9,6 +9,12 @@ export interface Message {
   createdAt: number;
   /** Assistant only: the OpenRouter model id that produced the reply. */
   model?: string;
+  /** Assistant only: the reasoning effort the model used, if it reasons. */
+  effort?: ReasoningEffort;
+  /** Assistant only: the model's reasoning, if it shares it (a summary or the full trace). */
+  reasoning?: string;
+  /** Assistant only: how long the model thought before answering, in ms. */
+  thinkingMs?: number;
   /** Assistant only. */
   status?: MessageStatus;
   error?: string;
@@ -22,7 +28,11 @@ export interface ChatMessage {
 }
 
 /** Events streamed by /api/chat, one JSON object per line. */
-export type ChatStreamEvent = { type: "text"; text: string } | { type: "error"; message: string };
+export type ChatStreamEvent =
+  | { type: "text"; text: string }
+  /** Part of the model's reasoning, which comes before the answer. */
+  | { type: "reasoning"; text: string }
+  | { type: "error"; message: string };
 
 export interface Conversation {
   id: string;
@@ -31,10 +41,23 @@ export interface Conversation {
   updatedAt: number;
 }
 
+/** OpenRouter's `reasoning.effort` levels. */
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** A model's `reasoning` entry in OpenRouter's model list. */
+export interface ModelReasoning {
+  /** Efforts the model accepts, lowest first. */
+  efforts: ReasoningEffort[];
+  /** Effort used until the user picks one. */
+  defaultEffort: ReasoningEffort;
+}
+
 export interface ChatModel {
   /** OpenRouter model id, e.g. "anthropic/claude-sonnet-5.5". */
   id: string;
   name: string;
   provider: string;
   description: string;
+  /** Absent for models that can't reason. */
+  reasoning?: ModelReasoning;
 }

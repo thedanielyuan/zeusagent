@@ -10,7 +10,6 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Composer } from "./composer";
 import { MessageList } from "./message-list";
-import { ModelSelector } from "./model-selector";
 
 const NO_MESSAGES: Message[] = [];
 
@@ -66,13 +65,10 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
   // (and focused) when the first message turns the new chat into a conversation.
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex h-13 shrink-0 items-center gap-1 px-2">
+      <header className="flex h-13 shrink-0 items-center justify-between px-2">
         <IconButton label="Open sidebar" onClick={onOpenSidebar} className="md:hidden">
           <MenuIcon />
         </IconButton>
-        <div className="flex min-w-0 flex-1 justify-center md:justify-start">
-          <ModelSelector />
-        </div>
         <IconButton label="New chat" onClick={onNewChat} className="md:hidden">
           <SquarePen />
         </IconButton>
