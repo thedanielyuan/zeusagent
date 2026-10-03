@@ -93,3 +93,30 @@ export function MenuOption({ label, description, note, className, ...props }: Me
     </DropdownMenu.RadioItem>
   );
 }
+
+/** An on/off setting shown with a switch. Toggling it leaves the menu open to show the switch flip. */
+export function MenuSwitch({
+  className,
+  children,
+  onSelect,
+  ...props
+}: ComponentProps<typeof DropdownMenu.CheckboxItem>) {
+  return (
+    <DropdownMenu.CheckboxItem
+      className={cn(menuItemClass, "group", className)}
+      onSelect={(event) => {
+        event.preventDefault();
+        onSelect?.(event);
+      }}
+      {...props}
+    >
+      {children}
+      <span
+        aria-hidden
+        className="relative ml-auto h-5 w-8 shrink-0 rounded-full bg-white/15 transition-colors group-data-[state=checked]:bg-accent"
+      >
+        <span className="absolute top-0.5 left-0.5 size-4 rounded-full bg-white transition-transform group-data-[state=checked]:translate-x-3" />
+      </span>
+    </DropdownMenu.CheckboxItem>
+  );
+}

@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowUp, Plus, Square } from "lucide-react";
+import { ArrowUp, Globe, Plus, Square } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui/icon-button";
+import { Menu, MenuContent, MenuSwitch, MenuTrigger } from "@/components/ui/menu";
+import { setWebSearch } from "@/lib/actions";
+import { useChatStore } from "@/lib/store";
 import { fitTextareaHeight, isSubmitKey } from "@/lib/utils";
 import { EffortSelector, ModelSelector } from "./model-selector";
-import { SearchToggle } from "./search-toggle";
 
 const INPUT_ID = "composer-input";
 
@@ -97,16 +99,8 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
         }}
         className="composer cursor-text rounded-[28px] border border-white/[0.08] bg-surface p-2.5 shadow-lg shadow-black/40 transition-colors focus-within:border-white/[0.14]"
       >
-        <div className="flex gap-1 [grid-area:leading]">
-          <IconButton
-            label="Add files"
-            tooltip="Attachments are coming soon"
-            aria-disabled
-            className="rounded-full aria-disabled:cursor-not-allowed"
-          >
-            <Plus />
-          </IconButton>
-          <SearchToggle />
+        <div className="flex [grid-area:leading]">
+          <AddMenu />
         </div>
 
         <textarea
@@ -150,5 +144,40 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
         </div>
       </form>
     </div>
+  );
+}
+
+/** The + button's menu. Web search is on by default, and the model decides when to search. */
+function AddMenu() {
+  const hydrated = useChatStore((state) => state.hydrated);
+  const webSearch = useChatStore((state) => state.webSearch);
+
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <IconButton
+          label="Add"
+          className="rounded-full data-[state=open]:bg-hover data-[state=open]:text-fg"
+        >
+          <Plus />
+        </IconButton>
+      </MenuTrigger>
+      <MenuContent
+        side="top"
+        align="start"
+        // Back to the message box. Radix would focus the + instead, which pops up its tooltip.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          focusComposer();
+        }}
+      >
+        {/* Disabled until the saved choice loads, since a change before then would overwrite the
+            saved chats. */}
+        <MenuSwitch checked={webSearch} onCheckedChange={setWebSearch} disabled={!hydrated}>
+          <Globe />
+          Web search
+        </MenuSwitch>
+      </MenuContent>
+    </Menu>
   );
 }

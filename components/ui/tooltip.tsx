@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip as RadixTooltip } from "radix-ui";
-import type { ReactElement, ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 
 export const TooltipProvider = RadixTooltip.Provider;
 
@@ -14,9 +14,18 @@ interface TooltipProps {
 }
 
 export function Tooltip({ content, side = "bottom", children }: TooltipProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
   return (
-    <RadixTooltip.Root>
-      <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
+    <RadixTooltip.Root
+      open={open}
+      // Not while the trigger's menu is open, which a quick click opens before the hover delay ends.
+      onOpenChange={(next) => setOpen(next && !triggerRef.current?.matches("[aria-expanded=true]"))}
+    >
+      <RadixTooltip.Trigger ref={triggerRef} asChild>
+        {children}
+      </RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content
           side={side}
