@@ -1,21 +1,20 @@
 "use client";
 
-import { Keyboard, Trash2 } from "lucide-react";
+import { Keyboard, Settings, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DeleteAllChatsDialog } from "@/components/delete-all-chats-dialog";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
-import { deleteAllConversations } from "@/lib/actions";
-import { navigate } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 interface UserMenuProps {
   /** Avatar only, for the collapsed sidebar. */
   compact?: boolean;
+  onOpenSettings: () => void;
   onShowShortcuts: () => void;
 }
 
 /** Account menu. A placeholder until sign-in exists. */
-export function UserMenu({ compact = false, onShowShortcuts }: UserMenuProps) {
+export function UserMenu({ compact = false, onOpenSettings, onShowShortcuts }: UserMenuProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   return (
@@ -37,6 +36,9 @@ export function UserMenu({ compact = false, onShowShortcuts }: UserMenuProps) {
           </button>
         </MenuTrigger>
         <MenuContent side="top" align="start" className="w-[232px]">
+          <MenuItem onSelect={onOpenSettings}>
+            <Settings /> Settings
+          </MenuItem>
           <MenuItem onSelect={onShowShortcuts}>
             <Keyboard /> Keyboard shortcuts
           </MenuItem>
@@ -47,17 +49,7 @@ export function UserMenu({ compact = false, onShowShortcuts }: UserMenuProps) {
         </MenuContent>
       </Menu>
 
-      <ConfirmDialog
-        open={confirmingDelete}
-        onOpenChange={setConfirmingDelete}
-        title="Delete all chats?"
-        description="This permanently deletes every chat saved in this browser."
-        confirmLabel="Delete all"
-        onConfirm={() => {
-          deleteAllConversations();
-          navigate("/", { replace: true });
-        }}
-      />
+      <DeleteAllChatsDialog open={confirmingDelete} onOpenChange={setConfirmingDelete} />
     </>
   );
 }

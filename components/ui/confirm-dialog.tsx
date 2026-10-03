@@ -1,11 +1,13 @@
 "use client";
 
 import { AlertDialog } from "radix-ui";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The button that opens the dialog, which gets focus back when it closes. */
+  trigger?: ReactElement;
   title: string;
   description: ReactNode;
   confirmLabel: string;
@@ -16,6 +18,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   open,
   onOpenChange,
+  trigger,
   title,
   description,
   confirmLabel,
@@ -23,6 +26,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>}
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/70 data-[state=open]:animate-fade-in" />
         <AlertDialog.Content className="fixed inset-0 z-50 m-auto h-fit w-[calc(100%-2rem)] max-w-md rounded-2xl border border-line bg-raised p-6 shadow-2xl shadow-black/60 outline-none data-[state=open]:animate-pop-in">

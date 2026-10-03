@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeftClose, PanelLeftOpen, Search, SquarePen, X } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search, Settings, SquarePen, X } from "lucide-react";
 import Link from "next/link";
 import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
@@ -14,6 +14,7 @@ import { UserMenu } from "./user-menu";
 
 interface SidebarActions {
   onNewChat: () => void;
+  onOpenSettings: () => void;
   onSearch: () => void;
   onSelectConversation: (conversationId: string) => void;
   onShowShortcuts: () => void;
@@ -98,6 +99,7 @@ function SidebarPanel({
   closeButton,
   className,
   onNewChat,
+  onOpenSettings,
   onSearch,
   onSelectConversation,
   onShowShortcuts,
@@ -142,8 +144,13 @@ function SidebarPanel({
         <ConversationList activeId={activeId} onSelect={onSelectConversation} />
       </nav>
 
-      <div className="shrink-0 border-t border-line p-2">
-        <UserMenu onShowShortcuts={onShowShortcuts} />
+      <div className="flex shrink-0 items-center gap-1 border-t border-line p-2">
+        <div className="min-w-0 flex-1">
+          <UserMenu onOpenSettings={onOpenSettings} onShowShortcuts={onShowShortcuts} />
+        </div>
+        <IconButton label="Settings" tooltipSide="top" onClick={onOpenSettings}>
+          <Settings />
+        </IconButton>
       </div>
     </div>
   );
@@ -174,7 +181,13 @@ interface SidebarRailProps extends SidebarActions {
   onExpand: () => void;
 }
 
-function SidebarRail({ onExpand, onNewChat, onSearch, onShowShortcuts }: SidebarRailProps) {
+function SidebarRail({
+  onExpand,
+  onNewChat,
+  onOpenSettings,
+  onSearch,
+  onShowShortcuts,
+}: SidebarRailProps) {
   const isMac = useIsMac();
   const withShortcut = (label: string, shortcut: string) => (
     <span className="flex items-center gap-2">
@@ -205,8 +218,11 @@ function SidebarRail({ onExpand, onNewChat, onSearch, onShowShortcuts }: Sidebar
       >
         <Search />
       </IconButton>
-      <div className="mt-auto">
-        <UserMenu compact onShowShortcuts={onShowShortcuts} />
+      <div className="mt-auto flex flex-col items-center gap-1">
+        <IconButton label="Settings" tooltipSide="right" onClick={onOpenSettings}>
+          <Settings />
+        </IconButton>
+        <UserMenu compact onOpenSettings={onOpenSettings} onShowShortcuts={onShowShortcuts} />
       </div>
     </div>
   );
