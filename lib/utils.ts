@@ -37,6 +37,15 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/** "reuters.com" for https://www.reuters.com/world/…, or undefined when `url` isn't a URL. */
+export function siteName(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
 /** Enter sends and Shift+Enter adds a line; on touch keyboards Enter always adds a line. */
 export function isSubmitKey(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   return (

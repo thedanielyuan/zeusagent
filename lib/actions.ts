@@ -1,4 +1,4 @@
-import { streamChat } from "./chat-api";
+import { streamChat, type ReplyChunk } from "./chat-api";
 import { getModel, resolveEffort } from "./models";
 import { useChatStore } from "./store";
 import type { Message, ReasoningEffort } from "./types";
@@ -15,6 +15,10 @@ export function setModel(modelId: string) {
 
 export function setEffort(effort: ReasoningEffort) {
   setState({ effort });
+}
+
+export function setWebSearch(webSearch: boolean) {
+  setState({ webSearch });
 }
 
 /** Sends a message, starting a new conversation when `conversationId` is null. Returns its id. */
@@ -101,7 +105,7 @@ export function deleteAllConversations() {
 }
 
 async function generate(conversationId: string) {
-  const { modelId, effort: preferredEffort, messages } = getState();
+  const { modelId, effort: preferredEffort, webSearch, messages } = getState();
   const reasoning = getModel(modelId)?.reasoning;
   const effort = reasoning && resolveEffort(reasoning, preferredEffort);
   const history = (messages[conversationId] ?? [])
@@ -122,17 +126,15 @@ async function generate(conversationId: string) {
   const controller = new AbortController();
   controllers.set(conversationId, controller);
   try {
-    const stream = streamChat({ model: modelId, effort, messages: history, signal: controller.signal });
+    const stream = streamChat({
+      model: modelId,
+      effort,
+      webSearch,
+      messages: history,
+      signal: controller.signal,
+    });
     for await (const chunk of stream) {
-      patchMessage(conversationId, reply.id, (message) =>
-        chunk.type === "reasoning"
-          ? { reasoning: (message.reasoning ?? "") + chunk.text }
-          : {
-              content: message.content + chunk.text,
-              // The answer starting ends the thinking.
-              thinkingMs: message.thinkingMs ?? Date.now() - message.createdAt,
-            },
-      );
+      patchMessage(conversationId, reply.id, (message) => applyChunk(message, chunk));
     }
     patchMessage(conversationId, reply.id, () => ({ status: "done" }));
   } catch (error) {
@@ -152,6 +154,24 @@ async function generate(conversationId: string) {
     );
     if (controllers.get(conversationId) === controller) controllers.delete(conversationId);
     touch(conversationId);
+  }
+}
+
+/** The changes a streamed piece of the reply makes to it. */
+function applyChunk(message: Message, chunk: ReplyChunk): Partial<Message> {
+  switch (chunk.type) {
+    case "reasoning":
+      return { reasoning: (message.reasoning ?? "") + chunk.text };
+    case "sources":
+      return { sources: [...(message.sources ?? []), ...chunk.sources] };
+    case "text":
+      // Some models write a blank line before they search; the answer starts with its first word.
+      if (!message.content && !chunk.text.trim()) return {};
+      return {
+        content: message.content + chunk.text,
+        // The answer starting ends the thinking.
+        thinkingMs: message.thinkingMs ?? Date.now() - message.createdAt,
+      };
   }
 }
 

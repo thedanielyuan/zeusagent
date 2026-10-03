@@ -14,7 +14,7 @@ import { EFFORTS, MODELS, effortName, getModel, isEffort, resolveEffort } from "
 import { useChatStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const pillClass =
+export const pillClass =
   "flex h-9 items-center gap-1 rounded-full px-2.5 text-sm text-fg-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg [&_svg]:size-4 [&_svg]:shrink-0";
 
 /** Dropped when the composer is phone-width, which leaves room for the full labels. */

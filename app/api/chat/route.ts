@@ -1,5 +1,6 @@
 import { getModel, isEffort } from "@/lib/models";
-import type { ChatMessage, ChatStreamEvent, ReasoningEffort } from "@/lib/types";
+import type { ChatMessage, ChatStreamEvent, ReasoningEffort, Source } from "@/lib/types";
+import { systemPrompt } from "./system-prompt";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -30,8 +31,9 @@ export async function POST(request: Request) {
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: body.model,
-        messages: body.messages,
+        messages: [{ role: "system", content: systemPrompt(body) }, ...body.messages],
         ...(body.effort && { reasoning: { effort: body.effort } }),
+        tools: serverTools(body),
         stream: true,
       }),
       // Stops the generation (and its billing) when the browser disconnects, e.g. on "stop".
@@ -59,17 +61,51 @@ export async function POST(request: Request) {
   });
 }
 
+/**
+ * Tools that OpenRouter runs for the model, which decides when to call them: a clock, and web
+ * search when the user has it on.
+ */
+function serverTools({ webSearch, timeZone }: ChatBody) {
+  const datetime = { type: "openrouter:datetime", parameters: { timezone: timeZone } };
+  if (!webSearch) return [datetime];
+  return [
+    datetime,
+    {
+      type: "openrouter:web_search",
+      parameters: {
+        max_results: 5,
+        // Each search costs about a cent. Past this, further searches fail and the model answers
+        // with what it has.
+        max_uses: 5,
+        // Favors local results, with providers that run the search themselves.
+        user_location: { type: "approximate", timezone: timeZone },
+      },
+    },
+  ];
+}
+
 interface ChatBody {
   model: string;
   effort?: ReasoningEffort;
   messages: ChatMessage[];
+  /** Whether the model may search the web. */
+  webSearch: boolean;
+  /** The user's IANA time zone, e.g. "Europe/Paris". */
+  timeZone: string;
 }
 
 function parseBody(value: unknown): ChatBody | null {
   if (typeof value !== "object" || value === null) return null;
-  const { model, effort, messages } = value as { model?: unknown; effort?: unknown; messages?: unknown };
+  const { model, effort, messages, webSearch, timeZone } = value as {
+    model?: unknown;
+    effort?: unknown;
+    messages?: unknown;
+    webSearch?: unknown;
+    timeZone?: unknown;
+  };
   if (typeof model !== "string" || !Array.isArray(messages) || messages.length === 0) return null;
   if (effort !== undefined && !isEffort(effort)) return null;
+  if (webSearch !== undefined && typeof webSearch !== "boolean") return null;
 
   const valid = messages.every(
     (message: Partial<ChatMessage> | null) =>
@@ -81,7 +117,19 @@ function parseBody(value: unknown): ChatBody | null {
     model,
     effort,
     messages: (messages as ChatMessage[]).map(({ role, content }) => ({ role, content })),
+    webSearch: webSearch ?? false,
+    // A missing or unknown zone shouldn't fail the reply; the model then gets UTC's date.
+    timeZone: canonicalTimeZone(timeZone) ?? "UTC",
   };
+}
+
+function canonicalTimeZone(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: value }).resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Splits a server-sent event stream into each event's `data`, dropping comments (keep-alives). */
@@ -114,13 +162,33 @@ function serverSentEventData(): TransformStream<string, string> {
 }
 
 interface CompletionChunk {
-  choices?: { delta?: { content?: string | null; reasoning?: string | null } }[];
+  choices?: {
+    delta?: {
+      content?: string | null;
+      reasoning?: string | null;
+      /** The pages a web search found, sent when the search finishes. */
+      annotations?: Annotation[] | null;
+    };
+  }[];
   /** Set when the generation fails after streaming has started (the HTTP status is still 200). */
   error?: { message?: string };
 }
 
+interface Annotation {
+  type?: string;
+  url_citation?: { url?: string; title?: string };
+}
+
+type TextType = Extract<ChatStreamEvent, { text: string }>["type"];
+
 /** Turns OpenRouter completion chunks into Zeus stream events, one JSON line each. */
 function toChatEvents(): TransformStream<string, string> {
+  // Several searches can find the same page.
+  const sentUrls = new Set<string>();
+  // The latest text of each kind, and whether a search has finished since.
+  const latest: Record<TextType, string> = { reasoning: "", text: "" };
+  const searched: Record<TextType, boolean> = { reasoning: false, text: false };
+
   return new TransformStream({
     transform(data, controller) {
       if (data === "[DONE]") return;
@@ -132,15 +200,47 @@ function toChatEvents(): TransformStream<string, string> {
       }
 
       const send = (event: ChatStreamEvent) => controller.enqueue(`${JSON.stringify(event)}\n`);
+      // What the model writes after a search would run straight on from what it wrote before
+      // ("Let me look that up.The answer is…"), so it starts a new paragraph.
+      const sendText = (type: TextType, text: string) => {
+        const newTurn = searched[type] && /\S$/.test(latest[type]) && /^\S/.test(text);
+        searched[type] = false;
+        latest[type] = text;
+        send({ type, text: newTurn ? `\n\n${text}` : text });
+      };
+
       if (chunk.error) {
         send({ type: "error", message: chunk.error.message || "The model stopped with an error." });
         return;
       }
       const delta = chunk.choices?.[0]?.delta;
-      if (delta?.reasoning) send({ type: "reasoning", text: delta.reasoning });
-      if (delta?.content) send({ type: "text", text: delta.content });
+      const found = searchResults(delta?.annotations);
+      if (found.length > 0) {
+        searched.reasoning = searched.text = true;
+        const sources = found.filter(({ url }) => {
+          if (sentUrls.has(url)) return false;
+          sentUrls.add(url);
+          return true;
+        });
+        if (sources.length > 0) send({ type: "sources", sources });
+      }
+      if (delta?.reasoning) sendText("reasoning", delta.reasoning);
+      if (delta?.content) sendText("text", delta.content);
     },
   });
+}
+
+/** The web pages in a chunk's annotations, keeping only http(s) links since the browser renders them. */
+function searchResults(annotations: Annotation[] | null | undefined): Source[] {
+  const sources: Source[] = [];
+  for (const annotation of annotations ?? []) {
+    if (annotation.type !== "url_citation") continue;
+    const { url = "", title = "" } = annotation.url_citation ?? {};
+    const parsed = URL.parse(url);
+    if (parsed?.protocol !== "https:" && parsed?.protocol !== "http:") continue;
+    sources.push({ url, title: title.replace(/\s+/g, " ").trim() || parsed.hostname });
+  }
+  return sources;
 }
 
 const STATUS_MESSAGES: Record<number, string> = {

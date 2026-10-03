@@ -17,11 +17,13 @@ export interface ChatState {
    * level use their closest one (see resolveEffort).
    */
   effort: ReasoningEffort | null;
+  /** Whether new replies may search the web (the model decides when). */
+  webSearch: boolean;
   /** True once the chats saved in this browser have been loaded. */
   hydrated: boolean;
 }
 
-type SavedState = Pick<ChatState, "conversations" | "messages" | "modelId" | "effort">;
+type SavedState = Pick<ChatState, "conversations" | "messages" | "modelId" | "effort" | "webSearch">;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -30,6 +32,7 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       modelId: DEFAULT_MODEL_ID,
       effort: null,
+      webSearch: true,
       hydrated: false,
     }),
     {
@@ -38,11 +41,12 @@ export const useChatStore = create<ChatState>()(
       storage: throttledLocalStorage(),
       // ChatApp rehydrates after mount, so the server and the first client render match.
       skipHydration: true,
-      partialize: ({ conversations, messages, modelId, effort }): SavedState => ({
+      partialize: ({ conversations, messages, modelId, effort, webSearch }): SavedState => ({
         conversations,
         messages,
         modelId,
         effort,
+        webSearch,
       }),
       merge: (saved, current) => ({ ...current, ...restore(saved as Partial<SavedState>) }),
       onRehydrateStorage: () => () => useChatStore.setState({ hydrated: true }),
@@ -64,6 +68,7 @@ function restore(saved: Partial<SavedState> | undefined): Partial<ChatState> {
     messages,
     ...(getModel(saved.modelId) && { modelId: saved.modelId }),
     ...(isEffort(saved.effort) && { effort: saved.effort }),
+    ...(typeof saved.webSearch === "boolean" && { webSearch: saved.webSearch }),
   };
 }
 

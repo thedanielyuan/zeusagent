@@ -3,20 +3,31 @@
 import type { Element, ElementContent } from "hast";
 import { Check, Copy } from "lucide-react";
 import { memo, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { useCopy } from "@/hooks/use-copy";
+import { siteName } from "@/lib/utils";
 
-const remarkPlugins = [remarkGfm];
+// A lone "~" means "about" ("~$85K"), so only "~~" strikes text through.
+const remarkPlugins: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: false }]];
 const rehypePlugins = [rehypeHighlight];
 
 const components: Components = {
-  a: ({ href, title, children }) => (
-    <a href={href} title={title} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ href, title, children }) => {
+    const site = citedSite(href, children);
+    return (
+      <a
+        href={href}
+        title={title}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={site && "citation"}
+      >
+        {site ?? children}
+      </a>
+    );
+  },
   pre: ({ node, children }) => <CodeBlock node={node}>{children}</CodeBlock>,
   table: ({ children }) => (
     <div className="table-wrapper">
@@ -63,6 +74,18 @@ function CodeBlock({ node, children }: { node?: Element; children?: ReactNode })
       <pre>{children}</pre>
     </div>
   );
+}
+
+/**
+ * The site a link cites, when it's written the way models cite search results: labeled with the
+ * site's domain, like [reuters.com](https://www.reuters.com/…), or numbered, like [1](…).
+ */
+function citedSite(href: string | undefined, children: ReactNode): string | undefined {
+  const site = href && siteName(href);
+  if (!site || typeof children !== "string") return undefined;
+  const label = children.trim().toLowerCase().replace(/^www\./, "");
+  if (/^\[?\d+\]?$/.test(label)) return site;
+  return label.includes(".") && (site === label || site.endsWith(`.${label}`)) ? label : undefined;
 }
 
 function languageOf(code: Element | undefined): string | undefined {
