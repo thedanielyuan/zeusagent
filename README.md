@@ -1,7 +1,6 @@
 # Zeus
 
-Zeus is an AI chat interface for talking to various AI models, served through
-[OpenRouter](https://openrouter.ai).
+Zeus is an AI chat interface for talking to various AI models
 
 ## Getting started
 

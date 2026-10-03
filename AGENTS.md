@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Zeus
 
-ChatGPT-style chat app for many models via OpenRouter: Next.js 16 App Router, React 19, Tailwind v4, Radix UI, Zustand. Chats are saved in the browser (localStorage); there is no database or auth.
+Zeus is an AI chat interface for many models via OpenRouter: Next.js 16 App Router, React 19, Tailwind v4, Radix UI, Zustand. Chats are saved in the browser (localStorage); there is no database or auth.
 
 ## Commands
 
