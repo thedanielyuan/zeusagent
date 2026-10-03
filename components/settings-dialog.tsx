@@ -1,20 +1,15 @@
 "use client";
 
-import { Database, Settings, X } from "lucide-react";
+import { Database, X } from "lucide-react";
 import { Dialog, Tabs } from "radix-ui";
 import { useState, type ReactNode } from "react";
 import { focusComposer } from "@/components/chat/composer";
-import { EffortSelector, ModelSelector, useCurrentModel } from "@/components/chat/model-selector";
 import { DeleteAllChatsDialog } from "@/components/delete-all-chats-dialog";
 import { IconButton } from "@/components/ui/icon-button";
-import { Switch } from "@/components/ui/switch";
-import { setWebSearch } from "@/lib/actions";
 import { useChatStore } from "@/lib/store";
 
-const SECTIONS = [
-  { id: "general", label: "General", icon: Settings, Panel: GeneralSettings },
-  { id: "data", label: "Data controls", icon: Database, Panel: DataControls },
-];
+/** The model, reasoning effort and web search aren't here: they're picked in the message box. */
+const SECTIONS = [{ id: "data", label: "Data controls", icon: Database, Panel: DataControls }];
 
 interface SettingsDialogProps {
   open: boolean;
@@ -80,35 +75,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function GeneralSettings() {
-  const hydrated = useChatStore((state) => state.hydrated);
-  const webSearch = useChatStore((state) => state.webSearch);
-  const { reasoning } = useCurrentModel();
-
-  return (
-    <>
-      <Setting label="Model" description="Used for new replies">
-        <ModelSelector side="bottom" />
-      </Setting>
-      {reasoning && (
-        <Setting label="Reasoning effort" description="How long the model thinks before it answers">
-          <EffortSelector side="bottom" />
-        </Setting>
-      )}
-      <Setting label="Web search" description="Lets models search the web when a question needs it">
-        {/* Disabled until the saved choice loads, since a change before then would overwrite the
-            saved chats. */}
-        <Switch
-          aria-label="Web search"
-          checked={webSearch}
-          onCheckedChange={setWebSearch}
-          disabled={!hydrated}
-        />
-      </Setting>
-    </>
   );
 }
 
