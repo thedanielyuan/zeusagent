@@ -22,11 +22,17 @@ function Chevron() {
   return <ChevronDown className="@max-[25rem]/composer:hidden" />;
 }
 
-function useCurrentModel() {
+/** The model used for new replies. */
+export function useCurrentModel() {
   return useChatStore((state) => getModel(state.modelId)) ?? MODELS[0];
 }
 
-export function ModelSelector() {
+interface SelectorProps {
+  /** Which side of the button the menu opens on. */
+  side?: "top" | "bottom";
+}
+
+export function ModelSelector({ side = "top" }: SelectorProps) {
   const hydrated = useChatStore((state) => state.hydrated);
   const current = useCurrentModel();
 
@@ -44,7 +50,7 @@ export function ModelSelector() {
         </button>
       </MenuTrigger>
       <MenuContent
-        side="top"
+        side={side}
         align="end"
         className="max-h-[min(var(--radix-dropdown-menu-content-available-height),560px)] w-[min(340px,calc(100vw-1rem))] overflow-y-auto"
       >
@@ -65,7 +71,7 @@ export function ModelSelector() {
 }
 
 /** Reasoning effort for the current model. Hidden for models that can't reason. */
-export function EffortSelector() {
+export function EffortSelector({ side = "top" }: SelectorProps) {
   const hydrated = useChatStore((state) => state.hydrated);
   const preferred = useChatStore((state) => state.effort);
   const { reasoning } = useCurrentModel();
@@ -85,7 +91,7 @@ export function EffortSelector() {
         </button>
       </MenuTrigger>
       <MenuContent
-        side="top"
+        side={side}
         align="end"
         className="max-h-(--radix-dropdown-menu-content-available-height) w-[min(300px,calc(100vw-1rem))] overflow-y-auto"
       >

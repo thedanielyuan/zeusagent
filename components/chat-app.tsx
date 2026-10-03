@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChatView } from "@/components/chat/chat-view";
 import { focusComposer } from "@/components/chat/composer";
 import { SearchDialog } from "@/components/search-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,6 +24,7 @@ export function ChatApp() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Load the chats saved in this browser. Checked after every render, not just on mount, so a
   // store re-created by hot reloading in development is loaded too.
@@ -87,6 +89,10 @@ export function ChatApp() {
           mobileOpen={mobileSidebarOpen}
           onMobileOpenChange={setMobileSidebarOpen}
           onNewChat={newChat}
+          onOpenSettings={() => {
+            setMobileSidebarOpen(false);
+            setSettingsOpen(true);
+          }}
           onSearch={() => {
             setMobileSidebarOpen(false);
             setSearchOpen(true);
@@ -107,6 +113,7 @@ export function ChatApp() {
         onNewChat={newChat}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </TooltipProvider>
   );
 }
