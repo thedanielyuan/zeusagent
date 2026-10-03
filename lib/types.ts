@@ -29,10 +29,12 @@ export interface Source {
   title: string;
 }
 
-/** A message as sent to the model. */
+/** A message as sent to /api/chat. */
 export interface ChatMessage {
   role: Role;
   content: string;
+  /** Assistant only: the OpenRouter model id that wrote the reply (the user can switch models). */
+  model?: string;
 }
 
 /** Events streamed by /api/chat, one JSON object per line. */
