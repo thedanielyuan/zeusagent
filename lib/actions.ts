@@ -110,7 +110,7 @@ async function generate(conversationId: string) {
   const effort = reasoning && resolveEffort(reasoning, preferredEffort);
   const history = (messages[conversationId] ?? [])
     .filter((message) => message.content.trim())
-    .map(({ role, content }) => ({ role, content }));
+    .map(({ role, content, model }) => ({ role, content, model }));
 
   const reply: Message = {
     id: createId(),

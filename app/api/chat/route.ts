@@ -1,6 +1,6 @@
 import { getModel, isEffort } from "@/lib/models";
 import type { ChatMessage, ChatStreamEvent, ReasoningEffort, Source } from "@/lib/types";
-import { systemPrompt } from "./system-prompt";
+import { promptMessages } from "./system-prompt";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: body.model,
-        messages: [{ role: "system", content: systemPrompt(body) }, ...body.messages],
+        messages: promptMessages(model, body),
         ...(body.effort && { reasoning: { effort: body.effort } }),
         tools: serverTools(body),
         stream: true,
@@ -110,13 +110,16 @@ function parseBody(value: unknown): ChatBody | null {
   const valid = messages.every(
     (message: Partial<ChatMessage> | null) =>
       (message?.role === "user" || message?.role === "assistant") &&
-      typeof message.content === "string",
+      typeof message.content === "string" &&
+      (message.model === undefined || typeof message.model === "string"),
   );
   if (!valid) return null;
   return {
     model,
     effort,
-    messages: (messages as ChatMessage[]).map(({ role, content }) => ({ role, content })),
+    messages: (messages as ChatMessage[]).map(({ role, content, model: author }) =>
+      role === "assistant" && author ? { role, content, model: author } : { role, content },
+    ),
     webSearch: webSearch ?? false,
     // A missing or unknown zone shouldn't fail the reply; the model then gets UTC's date.
     timeZone: canonicalTimeZone(timeZone) ?? "UTC",
