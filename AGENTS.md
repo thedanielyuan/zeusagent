@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Zeus
 
-Zeus is an AI chat interface for many models via OpenRouter: Next.js 16 App Router, React 19, Tailwind v4, Radix UI, Zustand. Chats are saved in the browser (localStorage); there is no database or auth.
+Zeus is an AI chat interface for many models via OpenRouter: Next.js 16 App Router, React 19, Tailwind v4, Radix UI, Zustand. Chats are saved in the browser (localStorage, with attached files in IndexedDB); there is no database or auth.
 
 ## Commands
 
@@ -30,6 +30,7 @@ There are no tests. Before finishing, run lint, typecheck and build; for UI chan
 - `lib/store.ts` loads saved chats after mount. Don't write to the store until `hydrated` is true, or the write overwrites the saved chats.
 - For an incompatible change to persisted state (`Conversation`, `Message`, `modelId`), bump `version` in `lib/store.ts` and add a `migrate`. Bumping without `migrate` discards everyone's saved chats.
 - `/api/chat` streams NDJSON `ChatStreamEvent`s (`lib/types.ts`) that `lib/chat-api.ts` parses; change both sides together.
+- Images and PDFs a user attaches are stored in IndexedDB by `lib/attachments.ts`; messages keep only their metadata. An action that removes messages should call `removeUnusedAttachments()` (`lib/actions.ts`) to delete their files; otherwise they linger until the next page load.
 
 ## Rules
 

@@ -1,5 +1,7 @@
-import { getModel, isEffort } from "@/lib/models";
+import { MAX_ATTACHMENTS } from "@/lib/attachments";
+import { canSearchX, getModel, isEffort } from "@/lib/models";
 import type {
+  AttachmentData,
   ChatMessage,
   ChatModel,
   ChatStreamEvent,
@@ -7,7 +9,7 @@ import type {
   Source,
   Usage,
 } from "@/lib/types";
-import { promptMessages } from "./system-prompt";
+import { isPdf, promptMessages } from "./system-prompt";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -48,7 +50,8 @@ export async function POST(request: Request) {
         messages: promptMessages(model, body),
         ...(body.effort && { reasoning: { effort: body.effort } }),
         max_tokens: Math.min(model.maxOutputTokens, MAX_REPLY_TOKENS),
-        tools: serverTools(body),
+        tools: serverTools(model, body),
+        ...pdfParsing(model, body),
         ...promptCaching(model),
         // Keeps the chat on one provider, whose cache holds the chat so far, and groups its
         // requests in OpenRouter's logs.
@@ -91,10 +94,20 @@ function promptCaching(model: ChatModel) {
 }
 
 /**
- * Tools that OpenRouter runs for the model, which decides when to call them: a clock, and web
- * search when the user has it on.
+ * Models that can't read PDFs get them as text, which OpenRouter extracts with its free engine
+ * (its default for them, OCR, is billed per page). The others read the PDF themselves.
  */
-function serverTools({ webSearch, timeZone }: ChatBody) {
+function pdfParsing(model: ChatModel, { messages }: ChatBody) {
+  const hasPdf = messages.some((message) => message.attachments?.some(isPdf));
+  if (!hasPdf || model.inputModalities.includes("file")) return {};
+  return { plugins: [{ id: "file-parser", pdf: { engine: "cloudflare-ai" } }] };
+}
+
+/**
+ * Tools that OpenRouter runs for the model, which decides when to call them: a clock, and with
+ * web search on, web search and opening pages by URL.
+ */
+function serverTools(model: ChatModel, { webSearch, xSearch, timeZone }: ChatBody) {
   const datetime = { type: "openrouter:datetime", parameters: { timezone: timeZone } };
   if (!webSearch) return [datetime];
   return [
@@ -104,10 +117,21 @@ function serverTools({ webSearch, timeZone }: ChatBody) {
       parameters: {
         max_results: 5,
         // Each search costs about a cent. Past this, further searches fail and the model answers
-        // with what it has.
+        // with what it has. Only Claude's own search and the fallback engine (Exa) keep to it.
         max_uses: 5,
         // Favors local results, with providers that run the search themselves.
         user_location: { type: "approximate", timezone: timeZone },
+        // Grok's own search can also search posts on X, which xAI bills per post it finds.
+        ...(xSearch && canSearchX(model) && { engine: "native", x_search: {} }),
+      },
+    },
+    {
+      type: "openrouter:web_fetch",
+      parameters: {
+        max_uses: 5,
+        // Keeps a long page from filling the context window (and the bill). Claude's own fetch
+        // ignores this.
+        max_content_tokens: 50_000,
       },
     },
   ];
@@ -117,8 +141,10 @@ interface ChatBody {
   model: string;
   effort?: ReasoningEffort;
   messages: ChatMessage[];
-  /** Whether the model may search the web. */
+  /** Whether the model may search the web and open pages. */
   webSearch: boolean;
+  /** Whether Grok's web search also searches posts on X. */
+  xSearch: boolean;
   /** The user's IANA time zone, e.g. "Europe/Paris". */
   timeZone: string;
   /** The chat's id. */
@@ -127,17 +153,19 @@ interface ChatBody {
 
 function parseBody(value: unknown): ChatBody | null {
   if (typeof value !== "object" || value === null) return null;
-  const { model, effort, messages, webSearch, timeZone, chatId } = value as {
+  const { model, effort, messages, webSearch, xSearch, timeZone, chatId } = value as {
     model?: unknown;
     effort?: unknown;
     messages?: unknown;
     webSearch?: unknown;
+    xSearch?: unknown;
     timeZone?: unknown;
     chatId?: unknown;
   };
   if (typeof model !== "string" || !Array.isArray(messages) || messages.length === 0) return null;
   if (effort !== undefined && !isEffort(effort)) return null;
   if (webSearch !== undefined && typeof webSearch !== "boolean") return null;
+  if (xSearch !== undefined && typeof xSearch !== "boolean") return null;
   // OpenRouter's limit for a session id.
   if (chatId !== undefined && (typeof chatId !== "string" || chatId.length > 256)) return null;
 
@@ -145,20 +173,46 @@ function parseBody(value: unknown): ChatBody | null {
     (message: Partial<ChatMessage> | null) =>
       (message?.role === "user" || message?.role === "assistant") &&
       typeof message.content === "string" &&
-      (message.model === undefined || typeof message.model === "string"),
+      (message.model === undefined || typeof message.model === "string") &&
+      (message.attachments === undefined ||
+        (message.role === "user" && validAttachments(message.attachments))),
   );
   if (!valid) return null;
   return {
     model,
     effort,
-    messages: (messages as ChatMessage[]).map(({ role, content, model: author }) =>
-      role === "assistant" && author ? { role, content, model: author } : { role, content },
-    ),
+    messages: (messages as ChatMessage[]).map(({ role, content, model: author, attachments }) => {
+      if (role === "assistant") return author ? { role, content, model: author } : { role, content };
+      return attachments?.length
+        ? { role, content, attachments: attachments.map(({ name, data }) => ({ name, data })) }
+        : { role, content };
+    }),
     webSearch: webSearch ?? false,
+    xSearch: xSearch ?? false,
     // A missing or unknown zone shouldn't fail the reply; the model then gets UTC's date.
     timeZone: canonicalTimeZone(timeZone) ?? "UTC",
     chatId,
   };
+}
+
+/** An image or PDF as a base64 data URL, which keeps OpenRouter from fetching URLs for us. */
+const ATTACHMENT_DATA = /^data:(?:image\/(?:png|jpeg|webp|gif)|application\/pdf);base64,[A-Za-z0-9+/]*={0,2}$/;
+/** About 22 MB once decoded, above the largest file the browser sends (a 20 MB PDF). */
+const MAX_ATTACHMENT_DATA_LENGTH = 30_000_000;
+
+function validAttachments(value: unknown): value is AttachmentData[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= MAX_ATTACHMENTS &&
+    value.every(
+      (attachment: Partial<AttachmentData> | null) =>
+        typeof attachment?.name === "string" &&
+        attachment.name.length <= 255 &&
+        typeof attachment.data === "string" &&
+        attachment.data.length <= MAX_ATTACHMENT_DATA_LENGTH &&
+        ATTACHMENT_DATA.test(attachment.data),
+    )
+  );
 }
 
 function canonicalTimeZone(value: unknown): string | undefined {

@@ -4,6 +4,7 @@ import { Code, Lightbulb, Menu as MenuIcon, Plane, Scale, SquarePen } from "luci
 import { useCallback, useEffect } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { sendMessage, stopGenerating } from "@/lib/actions";
+import type { PendingAttachment } from "@/lib/attachments";
 import { chatHref, navigate } from "@/lib/navigation";
 import { useChatStore } from "@/lib/store";
 import type { Message } from "@/lib/types";
@@ -48,10 +49,10 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
   }, [hydrated, conversationId, exists]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, attachments?: PendingAttachment[]) => {
       // Writing before saved chats load would overwrite them.
       if (!useChatStore.getState().hydrated) return;
-      const id = sendMessage(conversationId, text);
+      const id = sendMessage(conversationId, text, attachments);
       if (id !== conversationId) navigate(chatHref(id), { replace: true });
     },
     [conversationId],

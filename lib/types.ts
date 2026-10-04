@@ -7,6 +7,8 @@ export interface Message {
   role: Role;
   content: string;
   createdAt: number;
+  /** User only: images and PDFs sent with the message. */
+  attachments?: Attachment[];
   /** Assistant only: the OpenRouter model id that produced the reply. */
   model?: string;
   /** Assistant only: the reasoning effort the model used, if it reasons. */
@@ -25,6 +27,23 @@ export interface Message {
   status?: MessageStatus;
   error?: string;
   feedback?: "up" | "down";
+}
+
+/**
+ * An image or PDF sent with a message. The file itself is saved apart from the chats, in
+ * IndexedDB (see lib/attachments.ts), since localStorage only holds a few MB.
+ */
+export interface Attachment {
+  id: string;
+  /** The file's name, e.g. "receipt.pdf". */
+  name: string;
+  /** "application/pdf", or the image's type, e.g. "image/png". */
+  mimeType: string;
+  /** In bytes. */
+  size: number;
+  /** Images only, in pixels. */
+  width?: number;
+  height?: number;
 }
 
 /** A web page found by a search. */
@@ -53,8 +72,17 @@ export interface Usage {
 export interface ChatMessage {
   role: Role;
   content: string;
+  /** User only. */
+  attachments?: AttachmentData[];
   /** Assistant only: the OpenRouter model id that wrote the reply (the user can switch models). */
   model?: string;
+}
+
+/** An attachment as sent to /api/chat. */
+export interface AttachmentData {
+  name: string;
+  /** The file as a base64 data URL, e.g. "data:application/pdf;base64,…". */
+  data: string;
 }
 
 /** Events streamed by /api/chat, one JSON object per line. */
@@ -96,4 +124,8 @@ export interface ChatModel {
   reasoning?: ModelReasoning;
   /** The longest reply the model can write, reasoning included (`max_completion_tokens`). */
   maxOutputTokens: number;
+  /** What the model can read (`input_modalities`). Without "file", OpenRouter reads PDFs for it. */
+  inputModalities: InputModality[];
 }
+
+export type InputModality = "text" | "image" | "file" | "audio" | "video";

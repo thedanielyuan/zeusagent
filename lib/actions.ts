@@ -1,7 +1,13 @@
+import {
+  attachmentData,
+  deleteAttachmentsExcept,
+  saveAttachment,
+  type PendingAttachment,
+} from "./attachments";
 import { streamChat, type ReplyChunk } from "./chat-api";
 import { getModel, resolveEffort } from "./models";
 import { useChatStore } from "./store";
-import type { Message, ReasoningEffort } from "./types";
+import type { ChatMessage, Message, ReasoningEffort } from "./types";
 import { createId } from "./utils";
 
 const { getState, setState } = useChatStore;
@@ -21,14 +27,40 @@ export function setWebSearch(webSearch: boolean) {
   setState({ webSearch });
 }
 
-/** Sends a message, starting a new conversation when `conversationId` is null. Returns its id. */
-export function sendMessage(conversationId: string | null, content: string): string {
+export function setXSearch(xSearch: boolean) {
+  setState({ xSearch });
+}
+
+/**
+ * Sends a message, with any files attached to it, starting a new conversation when
+ * `conversationId` is null. Returns the conversation's id.
+ */
+export function sendMessage(
+  conversationId: string | null,
+  content: string,
+  attachments: PendingAttachment[] = [],
+): string {
+  const existing = conversationId !== null && conversationId in getState().conversations;
+  // One reply at a time per conversation.
+  if (existing && controllers.has(conversationId)) return conversationId;
+
   const text = content.trim();
   const now = Date.now();
   const message: Message = { id: createId(), role: "user", content: text, createdAt: now };
+  if (attachments.length > 0) {
+    for (const attachment of attachments) saveAttachment(attachment);
+    // Everything but the file itself, which goes to IndexedDB.
+    message.attachments = attachments.map(({ id, name, mimeType, size, width, height }) => ({
+      id,
+      name,
+      mimeType,
+      size,
+      width,
+      height,
+    }));
+  }
 
-  if (conversationId && getState().conversations[conversationId]) {
-    if (controllers.has(conversationId)) return conversationId;
+  if (existing) {
     updateMessages(conversationId, (messages) => [...messages, message]);
     touch(conversationId);
     void generate(conversationId);
@@ -39,7 +71,12 @@ export function sendMessage(conversationId: string | null, content: string): str
   setState((state) => ({
     conversations: {
       ...state.conversations,
-      [id]: { id, title: titleFrom(text), createdAt: now, updatedAt: now },
+      [id]: {
+        id,
+        title: titleFrom(text || (attachments[0]?.name ?? "")),
+        createdAt: now,
+        updatedAt: now,
+      },
     },
     messages: { ...state.messages, [id]: [message] },
   }));
@@ -53,19 +90,26 @@ export function regenerate(conversationId: string, messageId: string) {
   if (index === -1) return;
   controllers.get(conversationId)?.abort();
   updateMessages(conversationId, (messages) => messages.slice(0, index));
+  removeUnusedAttachments();
   void generate(conversationId);
 }
 
-/** Rewrites a user message, drops everything after it and generates a new reply. */
+/**
+ * Rewrites a user message, keeping its attachments, drops everything after it and generates a new
+ * reply.
+ */
 export function editMessage(conversationId: string, messageId: string, content: string) {
   const text = content.trim();
   const index = indexOfMessage(conversationId, messageId);
-  if (!text || index === -1) return;
+  if (index === -1) return;
+  const message = getState().messages[conversationId][index];
+  if (!text && !message.attachments?.length) return;
   controllers.get(conversationId)?.abort();
   updateMessages(conversationId, (messages) => [
     ...messages.slice(0, index),
-    { ...messages[index], content: text },
+    { ...message, content: text },
   ]);
+  removeUnusedAttachments();
   touch(conversationId);
   void generate(conversationId);
 }
@@ -97,20 +141,39 @@ export function deleteConversation(conversationId: string) {
     conversations: omit(state.conversations, conversationId),
     messages: omit(state.messages, conversationId),
   }));
+  removeUnusedAttachments();
 }
 
 export function deleteAllConversations() {
   for (const controller of controllers.values()) controller.abort();
   setState({ conversations: {}, messages: {} });
+  removeUnusedAttachments();
+}
+
+/** Deletes the saved files of attachments whose messages are gone. */
+export function removeUnusedAttachments() {
+  // Before the saved chats load, every file would look unused.
+  if (!getState().hydrated) return;
+  void deleteAttachmentsExcept(attachmentsInUse);
+}
+
+function attachmentsInUse(): Set<string> {
+  const used = new Set<string>();
+  for (const list of Object.values(getState().messages)) {
+    for (const message of list) {
+      for (const attachment of message.attachments ?? []) used.add(attachment.id);
+    }
+  }
+  return used;
 }
 
 async function generate(conversationId: string) {
-  const { modelId, effort: preferredEffort, webSearch, messages } = getState();
+  const { modelId, effort: preferredEffort, webSearch, xSearch, messages } = getState();
   const reasoning = getModel(modelId)?.reasoning;
   const effort = reasoning && resolveEffort(reasoning, preferredEffort);
-  const history = (messages[conversationId] ?? [])
-    .filter((message) => message.content.trim())
-    .map(({ role, content, model }) => ({ role, content, model }));
+  const sent = (messages[conversationId] ?? []).filter(
+    (message) => message.content.trim() || message.attachments?.length,
+  );
 
   const reply: Message = {
     id: createId(),
@@ -131,7 +194,8 @@ async function generate(conversationId: string) {
       model: modelId,
       effort,
       webSearch,
-      messages: history,
+      xSearch,
+      messages: await Promise.all(sent.map(toChatMessage)),
       signal: controller.signal,
     });
     for await (const chunk of stream) {
@@ -156,6 +220,21 @@ async function generate(conversationId: string) {
     if (controllers.get(conversationId) === controller) controllers.delete(conversationId);
     touch(conversationId);
   }
+}
+
+/** A message as /api/chat takes it, with its attachments' files read in. */
+async function toChatMessage({ role, content, model, attachments }: Message): Promise<ChatMessage> {
+  if (!attachments?.length) return { role, content, model };
+  const files = await Promise.all(attachments.map(({ id }) => attachmentData(id)));
+  return {
+    role,
+    content,
+    // A file that's gone (the browser's site data was cleared) is left out.
+    attachments: attachments.flatMap(({ name }, index) => {
+      const data = files[index];
+      return data ? [{ name, data }] : [];
+    }),
+  };
 }
 
 /** The changes a streamed piece of the reply makes to it. */
