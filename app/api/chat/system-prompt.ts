@@ -49,6 +49,7 @@ export function promptMessages(
     `Today is ${today}. The user's time zone is ${timeZone}. Use the datetime tool when you need the exact time.`,
     webSearch ? SEARCH_ON : SEARCH_OFF,
     ...(webSearch && canSearchX(model) ? [xSearch ? X_SEARCH_ON : X_SEARCH_OFF] : []),
+    IMAGES,
   ].join("\n\n");
 
   return [
@@ -90,6 +91,9 @@ const SEARCH_ON = [
 
 const SEARCH_OFF =
   "Web search is turned off, so you can't look anything up or open links. When the answer depends on information that may have changed since your training data, answer from what you know, say it may be out of date, and mention that the user can turn on Web search in the + menu of the message box.";
+
+const IMAGES =
+  "You can create images with the image generation tool when the user asks for one. Zeus shows the images you create with your reply.";
 
 const X_SEARCH_ON = "Your web search can also search posts on X.";
 

@@ -19,6 +19,8 @@ export interface Message {
   thinkingMs?: number;
   /** Assistant only: pages the model found by searching the web, in the order it found them. */
   sources?: Source[];
+  /** Assistant only: images the model created, saved like attachments. */
+  images?: Attachment[];
   /** Assistant only: the tokens the reply used and what it cost, once it finished. */
   usage?: Usage;
   /** Assistant only: set when the reply was cut off at the length limit or by a content filter. */
@@ -92,6 +94,8 @@ export type ChatStreamEvent =
   | { type: "reasoning"; text: string }
   /** Pages a web search found, each sent once, before the text that uses them. */
   | { type: "sources"; sources: Source[] }
+  /** An image the model created, as a base64 data URL. */
+  | { type: "image"; data: string }
   /** Sent last, once the reply is complete. */
   | { type: "end"; usage?: Usage; finishReason?: FinishReason }
   | { type: "error"; message: string };
@@ -101,6 +105,11 @@ export interface Conversation {
   title: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * The model the chat's next replies use. Unset in chats from before Zeus kept one, which go on
+   * with the model of their latest reply (see chatModelId).
+   */
+  modelId?: string;
 }
 
 /** OpenRouter's `reasoning.effort` levels. */

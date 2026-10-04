@@ -1,19 +1,26 @@
 "use client";
 
-import { RefreshCw, ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
+import { ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
-import { regenerate, sendMessage, setFeedback } from "@/lib/actions";
+import { retry, sendMessage, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
-import type { Message, Source } from "@/lib/types";
+import type { Attachment, Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ChatImage } from "./attachments";
 import { CopyButton } from "./copy-button";
-import { Markdown } from "./markdown";
+import {
+  CREATED_IMAGE_FIT,
+  imageReferenceCount,
+  Markdown,
+  withoutImageReferences,
+} from "./markdown";
 import { ReplyCost } from "./reply-cost";
 import { SourcesMenu } from "./sources";
 import { Thinking } from "./thinking";
 
 const NO_SOURCES: Source[] = [];
+const NO_IMAGES: Attachment[] = [];
 
 interface AssistantMessageProps {
   conversationId: string;
@@ -30,6 +37,10 @@ export const AssistantMessage = memo(function AssistantMessage({
   const streaming = message.status === "streaming";
   const waiting = streaming && !message.content;
   const sources = message.sources ?? NO_SOURCES;
+  const images = message.images ?? NO_IMAGES;
+  // Images the reply doesn't place in its text go after it.
+  const unplacedImages = images.slice(imageReferenceCount(message.content));
+  const copyText = withoutImageReferences(message.content);
   // While the model reasons or searches on the way to its answer, and afterwards if it shared its
   // reasoning.
   const showThinking =
@@ -53,9 +64,17 @@ export const AssistantMessage = memo(function AssistantMessage({
           </span>
         )
       ) : message.content ? (
-        <Markdown content={message.content} />
+        <Markdown content={message.content} images={images} />
       ) : (
         message.status === "stopped" && <p className="text-sm text-fg-subtle italic">Stopped</p>
+      )}
+
+      {unplacedImages.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {unplacedImages.map((image) => (
+            <ChatImage key={image.id} image={image} fit={CREATED_IMAGE_FIT} />
+          ))}
+        </div>
       )}
 
       {message.finishReason && (
@@ -78,10 +97,22 @@ export const AssistantMessage = memo(function AssistantMessage({
       {message.status === "error" && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          className="flex items-start gap-2.5 rounded-2xl border border-red-500/25 bg-red-500/10 py-3 pr-3 pl-4 text-sm text-red-200"
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-red-400" />
-          <span>{message.error ?? "Something went wrong."}</span>
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+            {message.error ?? "Something went wrong."}
+          </span>
+          {/* Only the last reply: retrying an earlier one would drop the messages after it. */}
+          {isLatest && (
+            <button
+              type="button"
+              onClick={() => retry(conversationId)}
+              className="-my-1 h-7 shrink-0 rounded-full border border-red-500/30 px-3 text-sm font-medium text-red-100 transition-colors hover:bg-red-500/15"
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
 
@@ -94,20 +125,13 @@ export const AssistantMessage = memo(function AssistantMessage({
               "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
-          {message.content && (
+          {copyText && <CopyButton text={copyText} />}
+          {(message.content || images.length > 0) && (
             <>
-              <CopyButton text={message.content} />
               <FeedbackButton conversationId={conversationId} message={message} value="up" />
               <FeedbackButton conversationId={conversationId} message={message} value="down" />
             </>
           )}
-          <IconButton
-            label="Regenerate"
-            onClick={() => regenerate(conversationId, message.id)}
-            className="size-8 [&_svg]:size-4"
-          >
-            <RefreshCw />
-          </IconButton>
           {sources.length > 0 && <SourcesMenu sources={sources} />}
           {message.model && (
             // The model's name gives way first on narrow screens, keeping the cost in view.
@@ -119,7 +143,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               {message.usage && (
                 <>
                   {" · "}
-                  <ReplyCost usage={message.usage} />
+                  <ReplyCost usage={message.usage} createdImages={images.length > 0} />
                 </>
               )}
             </span>

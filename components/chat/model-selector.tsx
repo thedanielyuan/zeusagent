@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/menu";
 import { setEffort, setModel } from "@/lib/actions";
 import { EFFORTS, MODELS, effortName, getModel, isEffort, resolveEffort } from "@/lib/models";
-import { useChatStore } from "@/lib/store";
+import { chatModelId, useChatStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const pillClass =
@@ -22,13 +22,19 @@ function Chevron() {
   return <ChevronDown className="@max-[25rem]/composer:hidden" />;
 }
 
-function useCurrentModel() {
-  return useChatStore((state) => getModel(state.modelId)) ?? MODELS[0];
+/** The model the chat's next reply uses (null: the new-chat screen). */
+export function useChatModel(conversationId: string | null) {
+  return useChatStore((state) => getModel(chatModelId(state, conversationId))) ?? MODELS[0];
 }
 
-export function ModelSelector() {
+interface SelectorProps {
+  /** The open chat, or null on the new-chat screen. */
+  conversationId: string | null;
+}
+
+export function ModelSelector({ conversationId }: SelectorProps) {
   const hydrated = useChatStore((state) => state.hydrated);
-  const current = useCurrentModel();
+  const current = useChatModel(conversationId);
 
   return (
     <Menu>
@@ -49,7 +55,10 @@ export function ModelSelector() {
         className="max-h-[min(var(--radix-dropdown-menu-content-available-height),560px)] w-[min(340px,calc(100vw-1rem))] overflow-y-auto"
       >
         <MenuLabel>Model</MenuLabel>
-        <MenuRadioGroup value={current.id} onValueChange={setModel}>
+        <MenuRadioGroup
+          value={current.id}
+          onValueChange={(modelId) => setModel(modelId, conversationId)}
+        >
           {MODELS.map((model) => (
             <MenuOption
               key={model.id}
@@ -65,10 +74,10 @@ export function ModelSelector() {
 }
 
 /** Reasoning effort for the current model. Hidden for models that can't reason. */
-export function EffortSelector() {
+export function EffortSelector({ conversationId }: SelectorProps) {
   const hydrated = useChatStore((state) => state.hydrated);
   const preferred = useChatStore((state) => state.effort);
-  const { reasoning } = useCurrentModel();
+  const { reasoning } = useChatModel(conversationId);
   if (!reasoning) return null;
   const effort = resolveEffort(reasoning, preferred);
 
