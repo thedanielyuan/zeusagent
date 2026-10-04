@@ -5,15 +5,22 @@ import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
 import { regenerate, sendMessage, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
-import type { Message, Source } from "@/lib/types";
+import type { Attachment, Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ChatImage } from "./attachments";
 import { CopyButton } from "./copy-button";
-import { Markdown } from "./markdown";
+import {
+  CREATED_IMAGE_FIT,
+  imageReferenceCount,
+  Markdown,
+  withoutImageReferences,
+} from "./markdown";
 import { ReplyCost } from "./reply-cost";
 import { SourcesMenu } from "./sources";
 import { Thinking } from "./thinking";
 
 const NO_SOURCES: Source[] = [];
+const NO_IMAGES: Attachment[] = [];
 
 interface AssistantMessageProps {
   conversationId: string;
@@ -30,6 +37,10 @@ export const AssistantMessage = memo(function AssistantMessage({
   const streaming = message.status === "streaming";
   const waiting = streaming && !message.content;
   const sources = message.sources ?? NO_SOURCES;
+  const images = message.images ?? NO_IMAGES;
+  // Images the reply doesn't place in its text go after it.
+  const unplacedImages = images.slice(imageReferenceCount(message.content));
+  const copyText = withoutImageReferences(message.content);
   // While the model reasons or searches on the way to its answer, and afterwards if it shared its
   // reasoning.
   const showThinking =
@@ -53,9 +64,17 @@ export const AssistantMessage = memo(function AssistantMessage({
           </span>
         )
       ) : message.content ? (
-        <Markdown content={message.content} />
+        <Markdown content={message.content} images={images} />
       ) : (
         message.status === "stopped" && <p className="text-sm text-fg-subtle italic">Stopped</p>
+      )}
+
+      {unplacedImages.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {unplacedImages.map((image) => (
+            <ChatImage key={image.id} image={image} fit={CREATED_IMAGE_FIT} />
+          ))}
+        </div>
       )}
 
       {message.finishReason && (
@@ -94,9 +113,9 @@ export const AssistantMessage = memo(function AssistantMessage({
               "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
-          {message.content && (
+          {copyText && <CopyButton text={copyText} />}
+          {(message.content || images.length > 0) && (
             <>
-              <CopyButton text={message.content} />
               <FeedbackButton conversationId={conversationId} message={message} value="up" />
               <FeedbackButton conversationId={conversationId} message={message} value="down" />
             </>
@@ -119,7 +138,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               {message.usage && (
                 <>
                   {" · "}
-                  <ReplyCost usage={message.usage} />
+                  <ReplyCost usage={message.usage} createdImages={images.length > 0} />
                 </>
               )}
             </span>

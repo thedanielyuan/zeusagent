@@ -90,7 +90,7 @@ export function ChatView({ conversationId, onOpenSidebar, onNewChat }: ChatViewP
 
       <div className={cn("mx-auto w-full max-w-3xl shrink-0 px-3 md:px-4", isNewChat ? "pb-4" : "pb-2")}>
         <Composer
-          draftKey={conversationId ?? "new"}
+          conversationId={conversationId}
           generating={generating}
           onSend={send}
           onStop={stop}

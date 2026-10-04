@@ -10,7 +10,7 @@ export interface ChatState {
    * doesn't re-render the sidebar on every token.
    */
   messages: Record<string, Message[]>;
-  /** Model used for new replies. */
+  /** The model picked last: new chats start with it. Each chat then keeps its own (chatModelId). */
   modelId: string;
   /**
    * Reasoning effort for new replies, or null for each model's default. Models without that
@@ -60,6 +60,20 @@ export const useChatStore = create<ChatState>()(
     },
   ),
 );
+
+/**
+ * The model a chat's next reply uses: the one picked in it, or in chats from before Zeus kept one,
+ * the model of its latest reply. The new-chat screen (null) uses the model picked last.
+ */
+export function chatModelId(state: ChatState, conversationId: string | null): string {
+  if (!conversationId) return state.modelId;
+  const picked = state.conversations[conversationId]?.modelId;
+  if (picked && getModel(picked)) return picked;
+  const latest = state.messages[conversationId]?.findLast(
+    (message) => message.role === "assistant" && getModel(message.model),
+  );
+  return latest?.model ?? state.modelId;
+}
 
 function restore(saved: Partial<SavedState> | undefined): Partial<ChatState> {
   if (!saved) return {};

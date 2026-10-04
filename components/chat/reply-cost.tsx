@@ -15,8 +15,14 @@ function formatCost(cost: number): string {
   return cost > 0 && cost < 0.001 ? "<$0.001" : dollars.format(cost);
 }
 
+interface ReplyCostProps {
+  usage: Usage;
+  /** Whether the model created images, whose cost OpenRouter doesn't report with the reply's. */
+  createdImages?: boolean;
+}
+
 /** What a reply cost, with the tokens it used in a tooltip. */
-export function ReplyCost({ usage }: { usage: Usage }) {
+export function ReplyCost({ usage, createdImages }: ReplyCostProps) {
   const { inputTokens, cachedTokens, outputTokens, reasoningTokens, cost } = usage;
   const details = (
     <span className="flex flex-col gap-0.5 py-0.5">
@@ -28,6 +34,7 @@ export function ReplyCost({ usage }: { usage: Usage }) {
         {tokens.format(outputTokens)} tokens out
         {reasoningTokens > 0 && `, ${tokens.format(reasoningTokens)} reasoning`}
       </span>
+      {createdImages && <span className="text-fg-muted">Not counting the images it created</span>}
     </span>
   );
 

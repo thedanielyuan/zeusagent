@@ -21,6 +21,12 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_REPLY_TOKENS = 128_000;
 
 /**
+ * Makes the images models create when asked: OpenAI's newest image model, which also costs less
+ * per image token than OpenRouter's default (GPT-5 Image).
+ */
+const IMAGE_MODEL = "openai/gpt-5.4-image-2";
+
+/**
  * Streams a reply from OpenRouter. The API key stays on the server; the browser receives
  * newline-delimited JSON events (see ChatStreamEvent).
  */
@@ -104,14 +110,17 @@ function pdfParsing(model: ChatModel, { messages }: ChatBody) {
 }
 
 /**
- * Tools that OpenRouter runs for the model, which decides when to call them: a clock, and with
- * web search on, web search and opening pages by URL.
+ * Tools that OpenRouter runs for the model, which decides when to call them: a clock, image
+ * creation, and with web search on, web search and opening pages by URL.
  */
 function serverTools(model: ChatModel, { webSearch, xSearch, timeZone }: ChatBody) {
-  const datetime = { type: "openrouter:datetime", parameters: { timezone: timeZone } };
-  if (!webSearch) return [datetime];
+  const always = [
+    { type: "openrouter:datetime", parameters: { timezone: timeZone } },
+    { type: "openrouter:image_generation", parameters: { model: IMAGE_MODEL } },
+  ];
+  if (!webSearch) return always;
   return [
-    datetime,
+    ...always,
     {
       type: "openrouter:web_search",
       parameters: {
@@ -260,6 +269,8 @@ interface CompletionChunk {
       reasoning?: string | null;
       /** The pages a web search found, sent when the search finishes. */
       annotations?: Annotation[] | null;
+      /** Images the image generation tool made, as data URLs. */
+      images?: { image_url?: { url?: string } }[] | null;
     };
     /** Set on the last chunks: "stop", or "length" and "content_filter" when cut off. */
     finish_reason?: string | null;
@@ -333,6 +344,10 @@ function toChatEvents(): TransformStream<string, string> {
       }
       if (delta?.reasoning) sendText("reasoning", delta.reasoning);
       if (delta?.content) sendText("text", delta.content);
+      for (const image of delta?.images ?? []) {
+        const data = image.image_url?.url;
+        if (data && IMAGE_DATA.test(data)) send({ type: "image", data });
+      }
 
       const finishReason = chunk.choices?.[0]?.finish_reason;
       if (finishReason === "length" || finishReason === "content_filter") {
@@ -361,6 +376,9 @@ function toUsage(usage: CompletionUsage | null | undefined): Usage | undefined {
     cost: usage.cost,
   };
 }
+
+/** Only images the browser can show, inline: never a URL it would have to fetch. */
+const IMAGE_DATA = /^data:image\/(?:png|jpeg|webp|gif);base64,/;
 
 /** The web pages in a chunk's annotations, keeping only http(s) links since the browser renders them. */
 function searchResults(annotations: Annotation[] | null | undefined): Source[] {

@@ -19,11 +19,11 @@ import {
   prepareAttachment,
   type PendingAttachment,
 } from "@/lib/attachments";
-import { canSearchX, getModel } from "@/lib/models";
+import { canSearchX } from "@/lib/models";
 import { useChatStore } from "@/lib/store";
 import { createId, fitTextareaHeight, isSubmitKey } from "@/lib/utils";
 import { ComposerAttachments, type DraftAttachment } from "./attachments";
-import { EffortSelector, ModelSelector } from "./model-selector";
+import { EffortSelector, ModelSelector, useChatModel } from "./model-selector";
 
 const INPUT_ID = "composer-input";
 
@@ -123,14 +123,15 @@ function clearDraft(key: string) {
 }
 
 interface ComposerProps {
-  /** Which chat's draft to show. */
-  draftKey: string;
+  /** The open chat, or null on the new-chat screen. */
+  conversationId: string | null;
   generating: boolean;
   onSend: (text: string, attachments: PendingAttachment[]) => void;
   onStop: () => void;
 }
 
-export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps) {
+export function Composer({ conversationId, generating, onSend, onStop }: ComposerProps) {
+  const draftKey = conversationId ?? "new";
   const { text, attachments } = useDraft(draftKey);
   const [error, setError] = useState<string>();
   const [dragging, setDragging] = useState(false);
@@ -261,7 +262,10 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
 
         <div ref={gridRef} className="composer">
           <div className="flex [grid-area:leading]">
-            <AddMenu onAddFiles={() => fileInputRef.current?.click()} />
+            <AddMenu
+              conversationId={conversationId}
+              onAddFiles={() => fileInputRef.current?.click()}
+            />
           </div>
 
           <textarea
@@ -291,8 +295,8 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
           />
 
           <div className="flex min-w-0 items-center justify-end gap-1 [grid-area:trailing]">
-            <EffortSelector />
-            <ModelSelector />
+            <EffortSelector conversationId={conversationId} />
+            <ModelSelector conversationId={conversationId} />
             {generating ? (
               <button
                 type="button"
@@ -338,14 +342,16 @@ export function Composer({ draftKey, generating, onSend, onStop }: ComposerProps
  * The + button's menu: attach files, and turn the web tools on or off. Web search is on by default,
  * and the model decides when to search or open a page.
  */
-function AddMenu({ onAddFiles }: { onAddFiles: () => void }) {
+interface AddMenuProps {
+  conversationId: string | null;
+  onAddFiles: () => void;
+}
+
+function AddMenu({ conversationId, onAddFiles }: AddMenuProps) {
   const hydrated = useChatStore((state) => state.hydrated);
   const webSearch = useChatStore((state) => state.webSearch);
   const xSearch = useChatStore((state) => state.xSearch);
-  const searchesX = useChatStore((state) => {
-    const model = getModel(state.modelId);
-    return model !== undefined && canSearchX(model);
-  });
+  const searchesX = canSearchX(useChatModel(conversationId));
 
   return (
     <Menu>

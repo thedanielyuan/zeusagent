@@ -3,15 +3,17 @@
 import "katex/dist/katex.min.css";
 import type { Element, ElementContent } from "hast";
 import { Check, Copy } from "lucide-react";
-import { memo, type ReactNode } from "react";
-import ReactMarkdown, { type Components, type Options } from "react-markdown";
+import { createContext, memo, useContext, type ReactNode } from "react";
+import ReactMarkdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { useCopy } from "@/hooks/use-copy";
 import { normalizeMath } from "@/lib/math";
+import type { Attachment } from "@/lib/types";
 import { siteName } from "@/lib/utils";
+import { ChatImage } from "./attachments";
 
 const remarkPlugins: Options["remarkPlugins"] = [
   // A lone "~" means "about" ("~$85K"), so only "~~" strikes text through.
@@ -42,6 +44,7 @@ const components: Components = {
       </a>
     );
   },
+  img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
   pre: ({ node, children }) => <CodeBlock node={node}>{children}</CodeBlock>,
   table: ({ children }) => (
     <div className="table-wrapper">
@@ -50,20 +53,79 @@ const components: Components = {
   ),
 };
 
+/** Keeps the model's references to the images it created, which aren't web addresses. */
+function urlTransform(url: string): string {
+  return url.startsWith("attachment:") ? url : defaultUrlTransform(url);
+}
+
+interface MarkdownProps {
+  content: string;
+  /** Images the model created, which the content refers to as "attachment:…". */
+  images?: Attachment[];
+}
+
 /** Renders assistant markdown (GFM, math, highlighted code). Raw HTML is not rendered. */
-export const Markdown = memo(function Markdown({ content }: { content: string }) {
+export const Markdown = memo(function Markdown({ content, images = NO_IMAGES }: MarkdownProps) {
   return (
     <div className="markdown">
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePlugins}
-        components={components}
-      >
-        {normalizeMath(content)}
-      </ReactMarkdown>
+      <CreatedImages value={images}>
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={components}
+          urlTransform={urlTransform}
+        >
+          {numberImageReferences(normalizeMath(content))}
+        </ReactMarkdown>
+      </CreatedImages>
     </div>
   );
 });
+
+const NO_IMAGES: Attachment[] = [];
+const CreatedImages = createContext(NO_IMAGES);
+
+/**
+ * A reference the model writes to an image it created, like ![A lighthouse](attachment:image):
+ * the image tool's way of placing it in the reply.
+ */
+const IMAGE_REFERENCE = /!\[([^\]]*)\]\(attachment:[^)\s]*\)/g;
+
+/** How many of the images a model created its reply places; the rest go after the reply. */
+export function imageReferenceCount(content: string): number {
+  return content.match(IMAGE_REFERENCE)?.length ?? 0;
+}
+
+/** The reply's text without its image references, e.g. for copying. */
+export function withoutImageReferences(content: string): string {
+  return content.replace(IMAGE_REFERENCE, "").trim();
+}
+
+/** Numbers the image references in order, so each shows the image created at that point. */
+function numberImageReferences(markdown: string): string {
+  let index = 0;
+  return markdown.replace(IMAGE_REFERENCE, (_, alt: string) => `![${alt}](attachment:${index++})`);
+}
+
+/** A reference to an image the model created, or else a link to the image's address. */
+function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
+  const images = useContext(CreatedImages);
+  if (typeof src !== "string" || !src) return null;
+  if (src.startsWith("attachment:")) {
+    const image = images[Number(src.slice("attachment:".length))];
+    return image ? <ChatImage image={image} fit={CREATED_IMAGE_FIT} alt={alt || undefined} /> : null;
+  }
+  // Images from elsewhere aren't loaded, since loading one sends its address off: a web page the
+  // model read could have it write chat text into an image address. A link leaves it to the user.
+  return (
+    <a href={src} target="_blank" rel="noopener noreferrer">
+      {alt || siteName(src) || "Image"}
+    </a>
+  );
+}
+
+/** The largest an image the model created is shown in the reply, in pixels. */
+export const CREATED_IMAGE_FIT = { width: 512, height: 512 };
 
 function CodeBlock({ node, children }: { node?: Element; children?: ReactNode }) {
   const code = node?.children.find(

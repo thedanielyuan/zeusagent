@@ -107,6 +107,34 @@ function withType(file: File, type: string): Blob {
   return file.type === type ? file : new Blob([file], { type });
 }
 
+/**
+ * Saves an image a model created (a base64 data URL), the same way as an attachment. `name` gets
+ * the file extension, for downloads.
+ */
+export async function saveCreatedImage(data: string, name: string): Promise<Attachment> {
+  const blob = await (await fetch(data)).blob();
+  const extension = blob.type === "image/jpeg" ? "jpg" : blob.type.replace("image/", "");
+  let width: number | undefined;
+  let height: number | undefined;
+  try {
+    const image = await createImageBitmap(blob);
+    ({ width, height } = image);
+    image.close();
+  } catch {
+    // Shown without a known size; the browser may still manage to draw it.
+  }
+  const attachment: Attachment = {
+    id: createId(),
+    name: `${name}.${extension}`,
+    mimeType: blob.type,
+    size: blob.size,
+    width,
+    height,
+  };
+  saveAttachment({ ...attachment, blob });
+  return attachment;
+}
+
 /** Saves a sent attachment's file, by its id. */
 export function saveAttachment({ id, blob }: PendingAttachment) {
   files.set(id, Promise.resolve(blob));

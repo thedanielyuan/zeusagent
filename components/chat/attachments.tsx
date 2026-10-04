@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, ImageOff, LoaderCircle, X } from "lucide-react";
+import { Download, FileText, ImageOff, LoaderCircle, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useState } from "react";
 import { IconButton } from "@/components/ui/icon-button";
@@ -78,7 +78,11 @@ export function MessageAttachments({ attachments, className }: MessageAttachment
       {images.length > 0 && (
         <div className="flex flex-wrap justify-end gap-2">
           {images.map((image) => (
-            <SentImage key={image.id} image={image} alone={images.length === 1} />
+            <ChatImage
+              key={image.id}
+              image={image}
+              fit={images.length === 1 ? SENT_IMAGE_FIT : undefined}
+            />
           ))}
         </div>
       )}
@@ -89,22 +93,27 @@ export function MessageAttachments({ attachments, className }: MessageAttachment
   );
 }
 
-/** The largest a lone image is shown in the chat, in pixels. */
-const IMAGE_MAX_WIDTH = 320;
-const IMAGE_MAX_HEIGHT = 288;
+/** The largest a lone sent image is shown, in pixels; several are shown as squares. */
+const SENT_IMAGE_FIT = { width: 320, height: 288 };
 
-/** A lone image at its own shape; several, as squares. Opens full size in a viewer. */
-function SentImage({ image, alone }: { image: Attachment; alone: boolean }) {
+interface ChatImageProps {
+  image: Attachment;
+  /** The box it's scaled down to fit, keeping its shape. Without one, a square thumbnail. */
+  fit?: { width: number; height: number };
+  /** A description, e.g. the model's caption for an image it created. Its name otherwise. */
+  alt?: string;
+}
+
+/** A sent or created image, which opens full size in a viewer. */
+export function ChatImage({ image, fit, alt = image.name }: ChatImageProps) {
   const url = useAttachmentUrl(image.id);
   const [viewing, setViewing] = useState(false);
   const { width = 1, height = 1 } = image;
   // Sized before the image loads, so the chat doesn't jump.
-  const style = alone
-    ? {
-        width: Math.min(width, IMAGE_MAX_WIDTH, (IMAGE_MAX_HEIGHT * width) / height),
-        aspectRatio: `${width} / ${height}`,
-      }
-    : undefined;
+  const style = fit && {
+    width: Math.min(width, fit.width, (fit.height * width) / height),
+    aspectRatio: `${width} / ${height}`,
+  };
 
   if (url === null) {
     return (
@@ -113,7 +122,7 @@ function SentImage({ image, alone }: { image: Attachment; alone: boolean }) {
         style={style}
         className={cn(
           "flex max-w-full flex-col items-center justify-center gap-1 rounded-2xl bg-surface p-2 text-xs text-fg-subtle",
-          !alone && "size-32",
+          !fit && "size-32",
         )}
       >
         <ImageOff className="size-5" />
@@ -126,18 +135,24 @@ function SentImage({ image, alone }: { image: Attachment; alone: boolean }) {
     <>
       <button
         type="button"
-        aria-label={`View ${image.name}`}
+        aria-label={`View ${alt}`}
         onClick={() => setViewing(true)}
         style={style}
-        className={cn("block max-w-full overflow-hidden rounded-2xl bg-surface", !alone && "size-32")}
+        className={cn("block max-w-full overflow-hidden rounded-2xl bg-surface", !fit && "size-32")}
       >
         {url && (
           // eslint-disable-next-line @next/next/no-img-element -- a local object URL; nothing for next/image to optimize
-          <img src={url} alt={image.name} className="size-full object-cover" />
+          <img src={url} alt={alt} className="size-full object-cover" />
         )}
       </button>
       {url && (
-        <ImageViewer url={url} name={image.name} open={viewing} onOpenChange={setViewing} />
+        <ImageViewer
+          url={url}
+          name={image.name}
+          alt={alt}
+          open={viewing}
+          onOpenChange={setViewing}
+        />
       )}
     </>
   );
@@ -145,13 +160,15 @@ function SentImage({ image, alone }: { image: Attachment; alone: boolean }) {
 
 interface ImageViewerProps {
   url: string;
+  /** The file name, for downloads. */
   name: string;
+  alt: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-/** The image as large as the window allows. A click anywhere closes it. */
-function ImageViewer({ url, name, open, onOpenChange }: ImageViewerProps) {
+/** The image as large as the window allows, with a download button. A click elsewhere closes it. */
+function ImageViewer({ url, name, alt, open, onOpenChange }: ImageViewerProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -161,14 +178,25 @@ function ImageViewer({ url, name, open, onOpenChange }: ImageViewerProps) {
           onClick={() => onOpenChange(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none data-[state=open]:animate-pop-in sm:p-10"
         >
-          <Dialog.Title className="sr-only">{name}</Dialog.Title>
+          <Dialog.Title className="sr-only">{alt}</Dialog.Title>
           {/* eslint-disable-next-line @next/next/no-img-element -- a local object URL; nothing for next/image to optimize */}
-          <img src={url} alt={name} className="max-h-full max-w-full rounded-lg object-contain" />
-          <Dialog.Close asChild>
-            <IconButton label="Close" tooltip={false} className="absolute top-3 right-3">
-              <X />
-            </IconButton>
-          </Dialog.Close>
+          <img src={url} alt={alt} className="max-h-full max-w-full rounded-lg object-contain" />
+          <div className="absolute top-3 right-3 flex gap-1">
+            <a
+              href={url}
+              download={name}
+              aria-label={`Download ${name}`}
+              onClick={(event) => event.stopPropagation()}
+              className="inline-flex size-9 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-hover hover:text-fg [&_svg]:size-5"
+            >
+              <Download />
+            </a>
+            <Dialog.Close asChild>
+              <IconButton label="Close" tooltip={false}>
+                <X />
+              </IconButton>
+            </Dialog.Close>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

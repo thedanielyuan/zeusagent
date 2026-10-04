@@ -2,11 +2,12 @@ import {
   attachmentData,
   deleteAttachmentsExcept,
   saveAttachment,
+  saveCreatedImage,
   type PendingAttachment,
 } from "./attachments";
 import { streamChat, type ReplyChunk } from "./chat-api";
 import { getModel, resolveEffort } from "./models";
-import { useChatStore } from "./store";
+import { chatModelId, useChatStore } from "./store";
 import type { ChatMessage, Message, ReasoningEffort } from "./types";
 import { createId } from "./utils";
 
@@ -15,8 +16,19 @@ const { getState, setState } = useChatStore;
 /** Replies currently streaming, by conversation id. */
 const controllers = new Map<string, AbortController>();
 
-export function setModel(modelId: string) {
-  setState({ modelId });
+/**
+ * Picks the model for a chat's next replies (null: the new-chat screen). It's also the model new
+ * chats start with.
+ */
+export function setModel(modelId: string, conversationId: string | null) {
+  setState((state) => {
+    const conversation = conversationId ? state.conversations[conversationId] : undefined;
+    if (!conversation) return { modelId };
+    return {
+      modelId,
+      conversations: { ...state.conversations, [conversation.id]: { ...conversation, modelId } },
+    };
+  });
 }
 
 export function setEffort(effort: ReasoningEffort) {
@@ -76,6 +88,7 @@ export function sendMessage(
         title: titleFrom(text || (attachments[0]?.name ?? "")),
         createdAt: now,
         updatedAt: now,
+        modelId: state.modelId,
       },
     },
     messages: { ...state.messages, [id]: [message] },
@@ -161,14 +174,18 @@ function attachmentsInUse(): Set<string> {
   const used = new Set<string>();
   for (const list of Object.values(getState().messages)) {
     for (const message of list) {
-      for (const attachment of message.attachments ?? []) used.add(attachment.id);
+      for (const file of [...(message.attachments ?? []), ...(message.images ?? [])]) {
+        used.add(file.id);
+      }
     }
   }
   return used;
 }
 
 async function generate(conversationId: string) {
-  const { modelId, effort: preferredEffort, webSearch, xSearch, messages } = getState();
+  const state = getState();
+  const { effort: preferredEffort, webSearch, xSearch, messages } = state;
+  const modelId = chatModelId(state, conversationId);
   const reasoning = getModel(modelId)?.reasoning;
   const effort = reasoning && resolveEffort(reasoning, preferredEffort);
   const sent = (messages[conversationId] ?? []).filter(
@@ -198,8 +215,17 @@ async function generate(conversationId: string) {
       messages: await Promise.all(sent.map(toChatMessage)),
       signal: controller.signal,
     });
+    let images = 0;
     for await (const chunk of stream) {
-      patchMessage(conversationId, reply.id, (message) => applyChunk(message, chunk));
+      if (chunk.type === "image") {
+        images += 1;
+        const image = await saveCreatedImage(chunk.data, `Zeus image ${images}`);
+        patchMessage(conversationId, reply.id, (message) => ({
+          images: [...(message.images ?? []), image],
+        }));
+      } else {
+        patchMessage(conversationId, reply.id, (message) => applyChunk(message, chunk));
+      }
     }
     patchMessage(conversationId, reply.id, () => ({ status: "done" }));
   } catch (error) {
@@ -237,8 +263,11 @@ async function toChatMessage({ role, content, model, attachments }: Message): Pr
   };
 }
 
-/** The changes a streamed piece of the reply makes to it. */
-function applyChunk(message: Message, chunk: ReplyChunk): Partial<Message> {
+/** The changes a streamed piece of the reply makes to it. Images are saved first (see generate). */
+function applyChunk(
+  message: Message,
+  chunk: Exclude<ReplyChunk, { type: "image" }>,
+): Partial<Message> {
   switch (chunk.type) {
     case "reasoning":
       return { reasoning: (message.reasoning ?? "") + chunk.text };
