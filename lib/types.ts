@@ -17,6 +17,10 @@ export interface Message {
   thinkingMs?: number;
   /** Assistant only: pages the model found by searching the web, in the order it found them. */
   sources?: Source[];
+  /** Assistant only: the tokens the reply used and what it cost, once it finished. */
+  usage?: Usage;
+  /** Assistant only: set when the reply was cut off at the length limit or by a content filter. */
+  finishReason?: FinishReason;
   /** Assistant only. */
   status?: MessageStatus;
   error?: string;
@@ -27,6 +31,22 @@ export interface Message {
 export interface Source {
   url: string;
   title: string;
+}
+
+/** Why a reply ended before the model finished it. */
+export type FinishReason = "length" | "content_filter";
+
+/** What a reply used and cost, as OpenRouter reports it. */
+export interface Usage {
+  /** Tokens sent to the model (the chat so far), including those read from its cache. */
+  inputTokens: number;
+  /** Input tokens read from the provider's cache, at a discount. */
+  cachedTokens: number;
+  /** Tokens the model wrote, including its reasoning. */
+  outputTokens: number;
+  reasoningTokens: number;
+  /** In US dollars. */
+  cost: number;
 }
 
 /** A message as sent to /api/chat. */
@@ -44,6 +64,8 @@ export type ChatStreamEvent =
   | { type: "reasoning"; text: string }
   /** Pages a web search found, each sent once, before the text that uses them. */
   | { type: "sources"; sources: Source[] }
+  /** Sent last, once the reply is complete. */
+  | { type: "end"; usage?: Usage; finishReason?: FinishReason }
   | { type: "error"; message: string };
 
 export interface Conversation {
@@ -72,4 +94,6 @@ export interface ChatModel {
   description: string;
   /** Absent for models that can't reason. */
   reasoning?: ModelReasoning;
+  /** The longest reply the model can write, reasoning included (`max_completion_tokens`). */
+  maxOutputTokens: number;
 }

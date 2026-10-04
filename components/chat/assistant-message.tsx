@@ -3,12 +3,13 @@
 import { RefreshCw, ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
-import { regenerate, setFeedback } from "@/lib/actions";
+import { regenerate, sendMessage, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
 import type { Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 import { Markdown } from "./markdown";
+import { ReplyCost } from "./reply-cost";
 import { SourcesMenu } from "./sources";
 import { Thinking } from "./thinking";
 
@@ -57,6 +58,23 @@ export const AssistantMessage = memo(function AssistantMessage({
         message.status === "stopped" && <p className="text-sm text-fg-subtle italic">Stopped</p>
       )}
 
+      {message.finishReason && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-fg-muted">
+          {message.finishReason === "length"
+            ? "This reply hit the length limit and was cut off."
+            : "The provider's content filter stopped this reply."}
+          {message.finishReason === "length" && isLatest && message.content && (
+            <button
+              type="button"
+              onClick={() => sendMessage(conversationId, "Continue")}
+              className="h-8 rounded-full border border-line px-3.5 font-medium text-fg transition-colors hover:bg-hover"
+            >
+              Continue
+            </button>
+          )}
+        </div>
+      )}
+
       {message.status === "error" && (
         <div
           role="alert"
@@ -92,9 +110,18 @@ export const AssistantMessage = memo(function AssistantMessage({
           </IconButton>
           {sources.length > 0 && <SourcesMenu sources={sources} />}
           {message.model && (
-            <span className="ml-2 truncate text-xs text-fg-subtle">
-              {modelName(message.model)}
-              {message.effort && ` · ${effortName(message.effort)}`}
+            // The model's name gives way first on narrow screens, keeping the cost in view.
+            <span className="ml-2 flex min-w-0 text-xs whitespace-pre text-fg-subtle">
+              <span className="truncate">
+                {modelName(message.model)}
+                {message.effort && ` · ${effortName(message.effort)}`}
+              </span>
+              {message.usage && (
+                <>
+                  {" · "}
+                  <ReplyCost usage={message.usage} />
+                </>
+              )}
             </span>
           )}
         </div>

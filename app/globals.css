@@ -342,6 +342,19 @@
   }
 }
 
+/* Display math (KaTeX), spaced like a paragraph and scrolling sideways when it's wider than the
+   reply. Outside the components layer because KaTeX's own stylesheet isn't in a layer, and
+   unlayered rules beat layered ones whatever their specificity. */
+.markdown .katex-display {
+  margin: 0 0 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.125rem;
+}
+.markdown .katex-display:last-child {
+  margin-bottom: 0;
+}
+
 @keyframes shimmer {
   from {
     background-position: 100% 0;
