@@ -1,17 +1,31 @@
 "use client";
 
+import "katex/dist/katex.min.css";
 import type { Element, ElementContent } from "hast";
 import { Check, Copy } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { useCopy } from "@/hooks/use-copy";
+import { normalizeMath } from "@/lib/math";
 import { siteName } from "@/lib/utils";
 
-// A lone "~" means "about" ("~$85K"), so only "~~" strikes text through.
-const remarkPlugins: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: false }]];
-const rehypePlugins = [rehypeHighlight];
+const remarkPlugins: Options["remarkPlugins"] = [
+  // A lone "~" means "about" ("~$85K"), so only "~~" strikes text through.
+  [remarkGfm, { singleTilde: false }],
+  // Likewise a lone "$" is a dollar sign: normalizeMath turns each piece of math into $$…$$.
+  [remarkMath, { singleDollarTextMath: false }],
+];
+const rehypePlugins: Options["rehypePlugins"] = [
+  // Before highlighting, which would treat the math as code. A formula KaTeX can't read shows as
+  // written, in muted text rather than KaTeX's red, and sizes are capped so one can't draw a
+  // giant box over the page.
+  [rehypeKatex, { errorColor: "var(--color-fg-muted)", strict: false, maxSize: 20 }],
+  rehypeHighlight,
+];
 
 const components: Components = {
   a: ({ href, title, children }) => {
@@ -36,7 +50,7 @@ const components: Components = {
   ),
 };
 
-/** Renders assistant markdown (GFM + syntax-highlighted code). Raw HTML is not rendered. */
+/** Renders assistant markdown (GFM, math, highlighted code). Raw HTML is not rendered. */
 export const Markdown = memo(function Markdown({ content }: { content: string }) {
   return (
     <div className="markdown">
@@ -45,7 +59,7 @@ export const Markdown = memo(function Markdown({ content }: { content: string })
         rehypePlugins={rehypePlugins}
         components={components}
       >
-        {content}
+        {normalizeMath(content)}
       </ReactMarkdown>
     </div>
   );

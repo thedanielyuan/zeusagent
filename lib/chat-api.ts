@@ -1,9 +1,14 @@
 import type { ChatMessage, ChatStreamEvent, ReasoningEffort } from "./types";
 
-/** A piece of the reply: its text, the model's reasoning, or pages it found on the web. */
+/**
+ * A piece of the reply: its text, the model's reasoning, pages it found on the web, or, last, what
+ * it used and cost.
+ */
 export type ReplyChunk = Exclude<ChatStreamEvent, { type: "error" }>;
 
 export interface ChatRequest {
+  /** The conversation's id. */
+  chatId: string;
   /** OpenRouter model id. */
   model: string;
   /** Omitted for models that can't reason. */
@@ -19,11 +24,12 @@ export interface ChatRequest {
  * Throws with a readable message when the request fails; aborting `signal` stops the reply.
  */
 export async function* streamChat(request: ChatRequest): AsyncGenerator<ReplyChunk> {
-  const { model, effort, webSearch, messages, signal } = request;
+  const { chatId, model, effort, webSearch, messages, signal } = request;
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      chatId,
       model,
       effort,
       webSearch,

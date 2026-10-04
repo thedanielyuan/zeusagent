@@ -127,6 +127,7 @@ async function generate(conversationId: string) {
   controllers.set(conversationId, controller);
   try {
     const stream = streamChat({
+      chatId: conversationId,
       model: modelId,
       effort,
       webSearch,
@@ -172,6 +173,8 @@ function applyChunk(message: Message, chunk: ReplyChunk): Partial<Message> {
         // The answer starting ends the thinking.
         thinkingMs: message.thinkingMs ?? Date.now() - message.createdAt,
       };
+    case "end":
+      return { usage: chunk.usage, finishReason: chunk.finishReason };
   }
 }
 
