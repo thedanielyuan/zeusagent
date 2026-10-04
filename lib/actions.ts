@@ -117,6 +117,17 @@ export function editMessage(conversationId: string, messageId: string, content: 
   void generate(conversationId);
 }
 
+/** Replaces the chat's last reply, if it failed, with a new one from the chat's model. */
+export function retry(conversationId: string) {
+  const last = getState().messages[conversationId]?.at(-1);
+  if (last?.status !== "error" || controllers.has(conversationId)) return;
+  updateMessages(conversationId, (messages) => messages.slice(0, -1));
+  // It may have created images before it failed.
+  removeUnusedAttachments();
+  touch(conversationId);
+  void generate(conversationId);
+}
+
 export function stopGenerating(conversationId: string) {
   controllers.get(conversationId)?.abort();
 }

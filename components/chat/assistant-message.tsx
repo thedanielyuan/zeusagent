@@ -3,7 +3,7 @@
 import { ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
-import { sendMessage, setFeedback } from "@/lib/actions";
+import { retry, sendMessage, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
 import type { Attachment, Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -97,10 +97,22 @@ export const AssistantMessage = memo(function AssistantMessage({
       {message.status === "error" && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          className="flex items-start gap-2.5 rounded-2xl border border-red-500/25 bg-red-500/10 py-3 pr-3 pl-4 text-sm text-red-200"
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-red-400" />
-          <span>{message.error ?? "Something went wrong."}</span>
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+            {message.error ?? "Something went wrong."}
+          </span>
+          {/* Only the last reply: retrying an earlier one would drop the messages after it. */}
+          {isLatest && (
+            <button
+              type="button"
+              onClick={() => retry(conversationId)}
+              className="-my-1 h-7 shrink-0 rounded-full border border-red-500/30 px-3 text-sm font-medium text-red-100 transition-colors hover:bg-red-500/15"
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
 
