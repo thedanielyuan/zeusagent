@@ -17,13 +17,18 @@ export interface ChatState {
    * level use their closest one (see resolveEffort).
    */
   effort: ReasoningEffort | null;
-  /** Whether new replies may search the web (the model decides when). */
+  /** Whether new replies may search the web and open pages (the model decides when). */
   webSearch: boolean;
+  /** Whether Grok's web search also searches posts on X. Off at first: xAI bills per post found. */
+  xSearch: boolean;
   /** True once the chats saved in this browser have been loaded. */
   hydrated: boolean;
 }
 
-type SavedState = Pick<ChatState, "conversations" | "messages" | "modelId" | "effort" | "webSearch">;
+type SavedState = Pick<
+  ChatState,
+  "conversations" | "messages" | "modelId" | "effort" | "webSearch" | "xSearch"
+>;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -33,6 +38,7 @@ export const useChatStore = create<ChatState>()(
       modelId: DEFAULT_MODEL_ID,
       effort: null,
       webSearch: true,
+      xSearch: false,
       hydrated: false,
     }),
     {
@@ -41,13 +47,14 @@ export const useChatStore = create<ChatState>()(
       storage: throttledLocalStorage(),
       // ChatApp rehydrates after mount, so the server and the first client render match.
       skipHydration: true,
-      partialize: ({ conversations, messages, modelId, effort, webSearch }): SavedState => ({
+      partialize: ({
         conversations,
         messages,
         modelId,
         effort,
         webSearch,
-      }),
+        xSearch,
+      }): SavedState => ({ conversations, messages, modelId, effort, webSearch, xSearch }),
       merge: (saved, current) => ({ ...current, ...restore(saved as Partial<SavedState>) }),
       onRehydrateStorage: () => () => useChatStore.setState({ hydrated: true }),
     },
@@ -69,6 +76,7 @@ function restore(saved: Partial<SavedState> | undefined): Partial<ChatState> {
     ...(getModel(saved.modelId) && { modelId: saved.modelId }),
     ...(isEffort(saved.effort) && { effort: saved.effort }),
     ...(typeof saved.webSearch === "boolean" && { webSearch: saved.webSearch }),
+    ...(typeof saved.xSearch === "boolean" && { xSearch: saved.xSearch }),
   };
 }
 

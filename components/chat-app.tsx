@@ -8,6 +8,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { removeUnusedAttachments } from "@/lib/actions";
 import { chatHref, navigate, useActiveConversationId } from "@/lib/navigation";
 import { SHORTCUTS, matchesShortcut } from "@/lib/shortcuts";
 import { useChatStore } from "@/lib/store";
@@ -27,9 +28,12 @@ export function ChatApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Load the chats saved in this browser. Checked after every render, not just on mount, so a
-  // store re-created by hot reloading in development is loaded too.
+  // store re-created by hot reloading in development is loaded too. Then delete any attachment
+  // files that no saved message uses anymore.
   useEffect(() => {
-    if (!useChatStore.persist.hasHydrated()) void useChatStore.persist.rehydrate();
+    if (!useChatStore.persist.hasHydrated()) {
+      void Promise.resolve(useChatStore.persist.rehydrate()).then(removeUnusedAttachments);
+    }
   });
 
   // The mobile drawer has no place on desktop layouts.

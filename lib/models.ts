@@ -2,10 +2,11 @@ import type { ChatModel, ModelReasoning, ReasoningEffort } from "./types";
 
 /**
  * Models offered in the picker. The ids are OpenRouter model slugs, `reasoning` mirrors each
- * model's `reasoning` entry and `maxOutputTokens` its `top_provider.max_completion_tokens`, so this
- * list can later be replaced by (or filtered from) https://openrouter.ai/api/v1/models without
- * other changes. Every model needs to support tool calling (`tools` in its
- * `supported_parameters`): replies get a clock and web search as tools.
+ * model's `reasoning` entry, `maxOutputTokens` its `top_provider.max_completion_tokens` and
+ * `inputModalities` its `architecture.input_modalities`, so this list can later be replaced by (or
+ * filtered from) https://openrouter.ai/api/v1/models without other changes. Every model needs to
+ * support tool calling (`tools` in its `supported_parameters`): replies get a clock and web search
+ * as tools.
  */
 export const MODELS: ChatModel[] = [
   {
@@ -15,6 +16,7 @@ export const MODELS: ChatModel[] = [
     description: "Strong all-rounder for coding and work",
     reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium" },
     maxOutputTokens: 128_000,
+    inputModalities: ["text", "image", "file"],
   },
   {
     id: "openai/gpt-6-luna",
@@ -26,6 +28,7 @@ export const MODELS: ChatModel[] = [
       defaultEffort: "medium",
     },
     maxOutputTokens: 128_000,
+    inputModalities: ["text", "image", "file"],
   },
   {
     id: "anthropic/claude-opus-5.5",
@@ -34,6 +37,7 @@ export const MODELS: ChatModel[] = [
     description: "Flagship for demanding reasoning and coding",
     reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "high" },
     maxOutputTokens: 128_000,
+    inputModalities: ["text", "image", "file"],
   },
   {
     id: "anthropic/claude-sonnet-5.5",
@@ -42,6 +46,7 @@ export const MODELS: ChatModel[] = [
     description: "Great everyday model for writing and code",
     reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "high" },
     maxOutputTokens: 128_000,
+    inputModalities: ["text", "image", "file"],
   },
   {
     id: "google/gemini-3.8-flash",
@@ -50,6 +55,7 @@ export const MODELS: ChatModel[] = [
     description: "Quick, capable multi-step reasoning",
     reasoning: { efforts: ["low", "medium", "high"], defaultEffort: "medium" },
     maxOutputTokens: 65_536,
+    inputModalities: ["text", "image", "file", "audio", "video"],
   },
   {
     id: "x-ai/grok-4.7",
@@ -58,6 +64,7 @@ export const MODELS: ChatModel[] = [
     description: "Built for coding, agents and knowledge work",
     reasoning: { efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "high" },
     maxOutputTokens: 450_000,
+    inputModalities: ["text", "image", "file"],
   },
   {
     id: "deepseek/deepseek-v4.1-flash",
@@ -66,6 +73,7 @@ export const MODELS: ChatModel[] = [
     description: "Efficient mixture-of-experts model",
     reasoning: { efforts: ["low", "high", "max"], defaultEffort: "high" },
     maxOutputTokens: 943_718,
+    inputModalities: ["text", "image"],
   },
   {
     id: "moonshotai/kimi-k3",
@@ -74,6 +82,7 @@ export const MODELS: ChatModel[] = [
     description: "Open-weight model for coding and long tasks",
     reasoning: { efforts: ["low", "high", "max"], defaultEffort: "max" },
     maxOutputTokens: 943_718,
+    inputModalities: ["text", "image", "video"],
   },
 ];
 
@@ -81,6 +90,14 @@ export const DEFAULT_MODEL_ID = MODELS[0].id;
 
 export function getModel(id: string | undefined): ChatModel | undefined {
   return MODELS.find((model) => model.id === id);
+}
+
+/**
+ * Whether the model's own web search can also search posts on X: SpaceXAI's Grok models, when
+ * OpenRouter runs their search on xAI.
+ */
+export function canSearchX(model: ChatModel): boolean {
+  return model.id.startsWith("x-ai/");
 }
 
 /** Display name for a model id, falling back to the slug for models no longer listed. */

@@ -13,8 +13,10 @@ export interface ChatRequest {
   model: string;
   /** Omitted for models that can't reason. */
   effort?: ReasoningEffort;
-  /** Lets the model search the web when it needs to. */
+  /** Lets the model search the web and open pages when it needs to. */
   webSearch: boolean;
+  /** Lets Grok's web search also search posts on X. */
+  xSearch: boolean;
   messages: ChatMessage[];
   signal: AbortSignal;
 }
@@ -24,7 +26,7 @@ export interface ChatRequest {
  * Throws with a readable message when the request fails; aborting `signal` stops the reply.
  */
 export async function* streamChat(request: ChatRequest): AsyncGenerator<ReplyChunk> {
-  const { chatId, model, effort, webSearch, messages, signal } = request;
+  const { chatId, model, effort, webSearch, xSearch, messages, signal } = request;
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,6 +35,7 @@ export async function* streamChat(request: ChatRequest): AsyncGenerator<ReplyChu
       model,
       effort,
       webSearch,
+      xSearch,
       messages,
       // So the model knows the user's date and can tell them the time.
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

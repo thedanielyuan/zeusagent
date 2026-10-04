@@ -6,6 +6,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { editMessage } from "@/lib/actions";
 import type { Message } from "@/lib/types";
 import { fitTextareaHeight, isSubmitKey } from "@/lib/utils";
+import { MessageAttachments } from "./attachments";
 import { CopyButton } from "./copy-button";
 
 interface UserMessageProps {
@@ -15,27 +16,39 @@ interface UserMessageProps {
 
 export const UserMessage = memo(function UserMessage({ conversationId, message }: UserMessageProps) {
   const [editing, setEditing] = useState(false);
+  const hasFiles = Boolean(message.attachments?.length);
+  const files = message.attachments && hasFiles && (
+    <MessageAttachments attachments={message.attachments} className="mb-1" />
+  );
 
   if (editing) {
     return (
-      <MessageEditor
-        initialValue={message.content}
-        onCancel={() => setEditing(false)}
-        onSubmit={(text) => {
-          setEditing(false);
-          editMessage(conversationId, message.id, text);
-        }}
-      />
+      <div className="flex flex-col items-end gap-1">
+        {files}
+        <MessageEditor
+          initialValue={message.content}
+          // Its files stay with the message, so the text can go.
+          allowEmpty={hasFiles}
+          onCancel={() => setEditing(false)}
+          onSubmit={(text) => {
+            setEditing(false);
+            editMessage(conversationId, message.id, text);
+          }}
+        />
+      </div>
     );
   }
 
   return (
     <div className="group flex flex-col items-end gap-1">
-      <div className="max-w-[85%] rounded-3xl bg-surface px-4 py-2.5 leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] sm:max-w-[70%]">
-        {message.content}
-      </div>
+      {files}
+      {message.content && (
+        <div className="max-w-[85%] rounded-3xl bg-surface px-4 py-2.5 leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] sm:max-w-[70%]">
+          {message.content}
+        </div>
+      )}
       <div className="flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-        <CopyButton text={message.content} />
+        {message.content && <CopyButton text={message.content} />}
         <IconButton
           label="Edit message"
           onClick={() => setEditing(true)}
@@ -50,11 +63,13 @@ export const UserMessage = memo(function UserMessage({ conversationId, message }
 
 interface MessageEditorProps {
   initialValue: string;
+  /** Whether the text can be sent empty. */
+  allowEmpty: boolean;
   onCancel: () => void;
   onSubmit: (text: string) => void;
 }
 
-function MessageEditor({ initialValue, onCancel, onSubmit }: MessageEditorProps) {
+function MessageEditor({ initialValue, allowEmpty, onCancel, onSubmit }: MessageEditorProps) {
   const [value, setValue] = useState(initialValue);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,8 +84,9 @@ function MessageEditor({ initialValue, onCancel, onSubmit }: MessageEditorProps)
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }, []);
 
+  const canSubmit = allowEmpty || value.trim().length > 0;
   const submit = () => {
-    if (value.trim()) onSubmit(value);
+    if (canSubmit) onSubmit(value);
   };
 
   return (
@@ -103,7 +119,7 @@ function MessageEditor({ initialValue, onCancel, onSubmit }: MessageEditorProps)
         <button
           type="button"
           onClick={submit}
-          disabled={!value.trim()}
+          disabled={!canSubmit}
           className="h-9 rounded-full bg-accent px-4 text-sm font-medium text-black transition-colors hover:bg-accent-hover disabled:bg-white/10 disabled:text-fg-subtle"
         >
           Send
