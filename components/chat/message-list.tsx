@@ -15,7 +15,7 @@ interface MessageListProps {
 export function MessageList({ conversationId, messages }: MessageListProps) {
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
 
-  // A new message at the end means the user just sent or regenerated: follow it.
+  // A new message at the end means the user just sent or edited one: follow it.
   const lastId = messages.at(-1)?.id;
   const previousLastId = useRef(lastId);
   useEffect(() => {

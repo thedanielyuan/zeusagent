@@ -97,16 +97,6 @@ export function sendMessage(
   return id;
 }
 
-/** Replaces an assistant reply (and anything after it) with a freshly generated one. */
-export function regenerate(conversationId: string, messageId: string) {
-  const index = indexOfMessage(conversationId, messageId);
-  if (index === -1) return;
-  controllers.get(conversationId)?.abort();
-  updateMessages(conversationId, (messages) => messages.slice(0, index));
-  removeUnusedAttachments();
-  void generate(conversationId);
-}
-
 /**
  * Rewrites a user message, keeping its attachments, drops everything after it and generates a new
  * reply.

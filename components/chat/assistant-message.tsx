@@ -1,9 +1,9 @@
 "use client";
 
-import { RefreshCw, ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
+import { ThumbsDown, ThumbsUp, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/icon-button";
-import { regenerate, sendMessage, setFeedback } from "@/lib/actions";
+import { sendMessage, setFeedback } from "@/lib/actions";
 import { effortName, modelName } from "@/lib/models";
 import type { Attachment, Message, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -120,13 +120,6 @@ export const AssistantMessage = memo(function AssistantMessage({
               <FeedbackButton conversationId={conversationId} message={message} value="down" />
             </>
           )}
-          <IconButton
-            label="Regenerate"
-            onClick={() => regenerate(conversationId, message.id)}
-            className="size-8 [&_svg]:size-4"
-          >
-            <RefreshCw />
-          </IconButton>
           {sources.length > 0 && <SourcesMenu sources={sources} />}
           {message.model && (
             // The model's name gives way first on narrow screens, keeping the cost in view.
